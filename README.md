@@ -1,4 +1,4 @@
-# nTools v1.0.3
+# nTools v1.0.4
 
 Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
@@ -15,8 +15,8 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 
 1. [GitHub](https://github.com/nmasaaki-web/nTools) の Code → Download ZIP を選択し、展開する。
 2. Mayaを起動し、Fileメニュー・メニューセット・シェルフが正常に表示されていることを確認。作業中のシーンを保存する。
-3. 展開した `install.py` をMayaのビューポートへドラッグ＆ドロップ。確認画面で **Install + Shelf** を選ぶと、未登録の場合に限りnToolsシェルフを作成する。**Files Only** は本体だけを導入する（安全確認用、初期選択）。
-4. Mayaを再起動。nToolsタブの4ツール、Uninstall、右端Updateを確認する。
+3. 展開した `install.py` をMayaのビューポートへドラッグ＆ドロップ。確認画面で **Install + Shelf** を選ぶと、未登録の場合に限りnToolsシェルフを作成する。**Files Only** は本体だけを導入する（安全確認用）。
+4. 初回導入は再起動不要。nToolsタブを選び、4ツール、Uninstall、右端Updateをすぐに使用できる。初回の実機検証では後から再起動してシェルフの保持も確認する。
 
 ドラッグできない場合はScript Editorの **Python** タブで実行し、展開した `install.py` を選択：
 
@@ -30,7 +30,7 @@ if p:
 
 ## 旧版 v1.0.0 からの移行（重要）
 
-旧版のUpdateはシェルフを再登録するため、**旧版のUpdateを押さず**、v1.0.3のZIPをダウンロードして上記のインストールを行う。まずFiles Onlyを選択し、Mayaを再起動してUIが正常か確認することを推奨。既存のnToolsシェルフは変更しない。タブがない場合は次のRepair Shelfを実行する。
+旧版のUpdateはシェルフを再登録するため、**旧版のUpdateを押さず**、v1.0.4のZIPをダウンロードして上記のインストールを行う。まずFiles Onlyを選択し、Mayaを再起動してUIが正常か確認することを推奨。既存のnToolsシェルフは変更しない。タブがない場合は次のRepair Shelfを実行する。
 
 ## 管理・修復・アンインストール
 
@@ -49,9 +49,22 @@ nt.manage()
 - **Update**：GitHub mainの新しいバージョンを確認し、本体だけ更新。既存シェルフは一切変更しない。更新後は再起動。
 - **Repair Shelf**：シェルフが存在しないときにだけ登録。既存タブは変更しない。既存のタブを作り直したい場合はMaya標準のShelf EditorでnToolsのみを削除・保存し、再起動してからRepair Shelf。既存のシェルフファイルが残っている場合は安全のため中止する。
 - **Add Uninstall Button**：v1.0.1の既存5ボタンシェルフに、明示的な確認後、Uninstallを追加する。Updateを右端に維持。既存タブを再構築せず、既知の構成と一致しない場合は中止する。更新後はMayaを再起動してから実行する。
-- **Uninstall**：安全のため自動でシェルフを削除しません。ボタンを押すと、Maya標準のShelf EditorでnToolsタブだけを削除し、Save All Shelvesで保存・再起動する手順を案内します。再起動後、上記管理コードでUninstallを選択すると、登録情報とシェルフファイルが残っていないことを確認して本体をバックアップに移動します。他のシェルフやプロジェクトは変更しません。
+- **Uninstall**：安全のため自動でシェルフを削除しません。ボタンを押すと、Maya標準のShelf EditorでnToolsタブだけを削除し、Save All Shelvesで保存・再起動する手順を案内します。案内ウィンドウには本体削除用のPythonコードを独立した欄で表示し、右側の「コピー」でコードだけをコピーできます。再起動前にメモ帳などへ保存し、再起動後にScript EditorのPythonタブへ貼り付けて実行してください（管理画面のUninstall選択は不要）。登録情報とシェルフファイルが残っていないことを確認し、最終確認後に本体をバックアップに移動します。他のシェルフやプロジェクトは変更しません。
 
 Updateは本体のみ更新します。Uninstallは2段階の案内方式です。
+
+初回導入で既存の本体がない場合は再起動不要です。既存本体の更新・アンインストール後は、旧モジュールが残るため再起動が必要です。
+
+本体削除用コード（案内ウィンドウのコピー内容）：
+
+```python
+import sys, maya.cmds as cmds
+p = cmds.internalVar(userScriptDir=True)
+if p not in sys.path: sys.path.insert(0,p)
+from ntools import installer as nt
+nt.uninstall()
+```
+
 
 
 ## v1.0.1からの移行
@@ -68,7 +81,7 @@ Updateは本体のみ更新します。Uninstallは2段階の案内方式です�
 
 ## 安全性と復旧
 
-v1.0.3は通常更新でシェルフを再構築せず、Maya.env、userSetup、メニューセット、ワークスペース、他のシェルフを直接編集しない。シェルフ登録・削除の直前にメニュー状態を確認し、関連する設定ファイル（存在するもの）をコピーして保存する。Mayaの標準処理による設定変更はあり得る。
+v1.0.4は通常更新でシェルフを再構築せず、Maya.env、userSetup、メニューセット、ワークスペース、他のシェルフを直接編集しない。シェルフ登録・削除の直前にメニュー状態を確認し、関連する設定ファイル（存在するもの）をコピーして保存する。Mayaの標準処理による設定変更はあり得る。
 
 本体はMayaのユーザースクリプトディレクトリ内の `ntools` に保存。バックアップは同じ親フォルダ内の `.ntools-backup-*`、`.ntools-uninstalled-*`、`.ntools-ui-backups`。バックアップを自動で削除しない。シェルフ登録失敗時は本体を保持し、UIを自動削除・全設定復元しない。
 
@@ -83,6 +96,6 @@ UIがおかしくなった場合は操作を中止し、Mayaの再起動・標�
 1. Mayaを終了し、2027の設定フォルダをバックアップ。
 2. `prefs/shelves` 内のnTools関連ファイル（`shelf_nTools.mel`、`shelf_nTools.mel.mel`、`.deleted` 等）を設定フォルダ外へ移動。他のシェルフは移動しない。
 3. `prefs/userPrefs.mel` を設定フォルダ外へ退避して再起動。必要なら `prefs` 全体を名前変更して初期化。設定が一部初期化されるのでバックアップを保持。Maya.envは削除不要。
-4. UIが正常に戻った後、v1.0.3の `install.py` からFiles Onlyで導入し、再起動。その後Repair Shelfを実行し、再起動して検証。旧版のUpdateは使わない。
+4. UIが正常に戻った後、v1.0.4の `install.py` からFiles Onlyで導入し、再起動。その後Repair Shelfを実行し、再起動して検証。旧版のUpdateは使わない。
 
 新版は拡張子なしのパスを `saveShelf` に渡し、期待したファイルの存在と異常なシェルフ名を検査します。実際のMaya 2027.2での確認が完了するまでは学生に配布しないでください。

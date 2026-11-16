@@ -24,7 +24,7 @@ SHELF = 'nTools'
 PACKAGE = 'ntools'
 MAX_BYTES = 32 * 1024 * 1024
 _RESTART_REQUIRED = False
-INSTALLER_VERSION = '1.0.3'
+INSTALLER_VERSION = '1.0.4'
 
 
 def _maya():
@@ -381,9 +381,88 @@ def repair_shelf():
             _notify('既存の nTools シェルフは変更していません。\n再作成する場合は、MayaのShelf Editorで nTools タブだけを削除し、再起動後に Repair Shelf を実行してください。');return
         if not _confirm('nToolsシェルフを新規登録します。既存のシェルフやメニュー設定は変更しません。','Repair'): return
         register_shelf(m)
-        _notify('nToolsシェルフを登録しました。Mayaを再起動して確認してください。')
+        _notify('nToolsシェルフを登録しました。\nツールは今すぐ使用できます。')
     except Exception as exc:
         traceback.print_exc(); _notify('シェルフ登録失敗：\n'+str(exc)+'\n本体は保持しています。MayaのUIを確認してください。')
+
+
+def _uninstall_guide():
+    """Display copyable instructions without modifying the shelf or package."""
+    code = _command('nt.uninstall()')
+    try:
+        try:
+            from PySide6 import QtGui, QtWidgets
+            from shiboken6 import wrapInstance
+        except ImportError:
+            from PySide2 import QtGui, QtWidgets
+            from shiboken2 import wrapInstance
+        import maya.OpenMayaUI as omui
+        ptr = omui.MQtUtil.mainWindow()
+        parent = wrapInstance(int(ptr), QtWidgets.QWidget) if ptr else None
+        dialog = QtWidgets.QDialog(parent)
+        dialog.setWindowTitle('nTools — アンインストール')
+        dialog.resize(690, 405)
+        dialog.setMinimumWidth(510)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        title = QtWidgets.QLabel('シェルフと本体を順番に削除します。')
+        font = title.font(); font.setBold(True); title.setFont(font)
+        title.setWordWrap(True); layout.addWidget(title)
+        steps = QtWidgets.QLabel(
+            '① Maya標準のShelf Editorで nTools タブだけを削除。\n'
+            '② Save All Shelves で保存し、Mayaを再起動。\n'
+            '③ 再起動後、Script EditorのPythonタブに下のコードを貼り付けて実行。')
+        steps.setWordWrap(True); layout.addWidget(steps)
+
+        code_header = QtWidgets.QLabel('本体削除用 Pythonコード')
+        layout.addWidget(code_header)
+        row = QtWidgets.QHBoxLayout(); layout.addLayout(row)
+        editor = QtWidgets.QPlainTextEdit()
+        editor.setPlainText(code)
+        editor.setReadOnly(True)
+        editor.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        font_db = QtGui.QFontDatabase
+        fixed = getattr(font_db, 'FixedFont', None)
+        if fixed is None: fixed = font_db.SystemFont.FixedFont
+        editor.setFont(font_db.systemFont(fixed))
+        editor.setMinimumHeight(135)
+        row.addWidget(editor, 1)
+        side = QtWidgets.QVBoxLayout(); row.addLayout(side)
+        copy_button = QtWidgets.QPushButton('コピー')
+        copy_button.setMinimumWidth(88)
+        copy_button.setAutoDefault(False)
+        copy_button.setToolTip('Pythonコードだけをクリップボードにコピーします。')
+        side.addWidget(copy_button); side.addStretch(1)
+        status = QtWidgets.QLabel('コピーしたコードは再起動前にメモ帳などへ保存しておくと確実です。')
+        status.setWordWrap(True); layout.addWidget(status)
+
+        def copy_code():
+            clipboard = QtWidgets.QApplication.clipboard()
+            if clipboard is None:
+                status.setText('コピーできませんでした。Script Editorにコードを表示しました。')
+                print(code)
+                return
+            clipboard.setText(code)
+            status.setText('コードをコピーしました。再起動前にメモ帳などへ貼り付けて保存できます。')
+        copy_button.clicked.connect(copy_code)
+        notice = QtWidgets.QLabel('この画面ではシェルフも本体も削除しません。コードを実行すると最終確認が表示されます。')
+        notice.setWordWrap(True); layout.addWidget(notice)
+        bottom = QtWidgets.QHBoxLayout(); layout.addLayout(bottom)
+        bottom.addStretch(1)
+        close = QtWidgets.QPushButton('閉じる'); close.setAutoDefault(False)
+        close.clicked.connect(dialog.reject); bottom.addWidget(close)
+        if hasattr(dialog, 'exec'): dialog.exec()
+        else: dialog.exec_()
+    except Exception:
+        # Preserve the two-stage removal if Qt is unavailable; never attempt
+        # automatic deletion as a fallback. Code remains available in the log.
+        traceback.print_exc()
+        print('nTools: 本体削除用 Pythonコード:\n'+code)
+        _notify('Shelf EditorでnToolsだけを削除し、Save All Shelvesで保存・再起動してください。\n'
+                '再起動前にScript Editorの履歴に表示したPythonコードを保存し、再起動後に実行してください。\n'
+                'この段階では何も削除していません。')
 
 
 def uninstall_from_shelf():
@@ -402,10 +481,7 @@ def uninstall():
             if not _owned_shelf():
                 raise RuntimeError('nToolsシェルフに未確認のボタンがあります。自動削除しません。')
             _backup_ui()
-            _notify('安全のため、Maya標準のShelf EditorでnToolsタブだけを削除してください。\n'
-                    'Save All Shelvesで保存し、Mayaを再起動します。\n'
-                    '再起動後、Script Editorで from ntools import installer as nt; nt.manage() を実行し、Uninstallを選択してください。\n'
-                    'この段階ではシェルフも本体も削除していません。')
+            _uninstall_guide()
             return
         # Check persistent registrations before moving the package.
         if _shelf_path().exists():
@@ -493,6 +569,8 @@ def _notify(message):
 def install(source=None):
     """Install local release; create shelf only if absent and safe."""
     try:
+        if getattr(sys,'_ntools_restart_required',False):
+            _notify('前回の更新・アンインストールを反映するため、先にMayaを再起動してください。');return
         _ui_snapshot()
         path=Path(source).resolve() if source else None
         if path and path.is_file(): path=path.parent
@@ -505,15 +583,18 @@ def install(source=None):
         if old is None and exists: raise RuntimeError('同名の既存シェルフがあります。変更しません。')
         if old and _version(m['version'])<_version(old['version']): raise RuntimeError('旧版はインストールできません。')
         msg='nTools '+m['version']+' を導入します。\n既存のシェルフ・メニュー設定は変更しません。\nシェルフがない場合のみ新規登録します。'
-        choice=cmds.confirmDialog(title='nTools',message=msg,button=['Install + Shelf','Files Only','Cancel'],defaultButton='Files Only',cancelButton='Cancel',dismissString='Cancel')
+        if old is None: msg+='\n初回導入は再起動不要です。'
+        choice=cmds.confirmDialog(title='nTools',message=msg,button=['Install + Shelf','Files Only','Cancel'],defaultButton='Install + Shelf',cancelButton='Cancel',dismissString='Cancel')
         if choice not in ('Install + Shelf','Files Only'):return
         restart=_apply(m,payload)
         if not exists and choice=='Install + Shelf':
             try: register_shelf(m)
             except Exception as exc:
                 traceback.print_exc(); _notify('本体の導入は完了しましたが、シェルフ登録を中止しました。\n'+str(exc)+'\nMayaのUIを確認後、Repair Shelfを実行してください。');return
-        note='Mayaを再起動してください。' if restart else 'nTools シェルフを選んでください。'
-        if not exists and choice=='Files Only': note='本体のみ導入しました。Mayaを再起動してUIを確認後、Repair Shelfを実行してください。'
+        note='既存の本体を更新したため、Mayaを再起動してください。' if restart else '再起動は不要です。nTools シェルフを選ぶと、今すぐ使用できます。'
+        if not exists and choice=='Files Only':
+            note='本体のみ導入しました。管理画面のRepair Shelfでシェルフを登録してください。'
+            note+='\n既存の本体を更新したため、先にMayaを再起動してください。' if restart else '\n初回導入は再起動不要です。'
         if old and _layout_signature(old)!=_layout_signature(m): note+='\nボタン構成が変わりました。再起動後、管理メニューのAdd Uninstall Button（旧5ボタン用）またはRepair Shelf（未登録時）を利用してください。'
         _notify('インストール完了！ nTools '+m['version']+'\n'+note)
     except Exception as exc:

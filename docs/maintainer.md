@@ -1,4 +1,4 @@
-# nTools 管理者向けガイド v1.0.3
+# nTools 管理者向けガイド v1.0.4
 
 ## 公開・移行
 
@@ -6,7 +6,7 @@ ZIPの中身を既存のGit作業フォルダに上書きコピーする。`.git
 
 ```bash
 git add .
-git commit -m "Release nTools v1.0.3 - safer installer"
+git commit -m "Release nTools v1.0.4 - safer installer"
 git push
 ```
 
@@ -15,11 +15,11 @@ v1.0.0〜1.0.2から移行する場合は、旧Updateを使用せず、新ZIPの
 ## 実機検証手順（Windows / macOS）
 
 1. Mayaの設定フォルダをMaya終了中に別の場所へコピーし、復旧できるようにする。既存の制作シーンは保存する。可能なら検証専用OSユーザーを使用する。
-2. 起動してFile等のメニュー、メニューセット、他シェルフを確認。Files Onlyで導入する。
-3. Maya再起動後、UIが正常ならREADMEの管理コードからRepair Shelfを選択する。4ツール、Uninstall、Updateを確認し、各ツールの起動を試す。
+2. 起動してFile等のメニュー、メニューセット、他シェルフを確認。新規環境でInstall + Shelfを選択する（Files Onlyによる段階テストも可能）。
+3. 再起動せず4ツール、Uninstall、Updateを確認し、各ツールの起動を試す。Files Onlyを選んだ場合は管理コードからRepair Shelfを選択する。
 4. Maya再起動後にシェルフが残ること、File等のメニューが表示されることを確認。
 5. Updateボタンで最新版判定を確認。次のテスト版を公開して更新するとき、既存シェルフのボタン数・順序、メニューが変化しないことを確認。
-6. Uninstallは2段階：Maya標準Shelf EditorでnToolsだけを削除・保存し再起動後、管理画面のUninstallから本体をバックアップへ移動する。自動シェルフ削除は行わない。
+6. Uninstallは2段階：案内ウィンドウで「コピー」を押し、コードがクリップボードに入ることを確認。メモ帳などに保存してからMaya標準Shelf EditorでnToolsだけを削除・保存し再起動。Pythonタブでコピーしたコードを実行し、確認後に本体をバックアップへ移動する。自動シェルフ削除は行わない。
 
 ## 変更履歴と設計
 
@@ -27,6 +27,7 @@ v1.0.0〜1.0.2から移行する場合は、旧Updateを使用せず、新ZIPの
 - 1.0.1: パッケージ置換をシェルフ操作から分離。既存タブは再構築しない。修復は欠落タブに限定。Maya公式addNewShelfTab / deleteShelfTabを使用し、独自deleteUIでタブを削除しない。メニューセットを読み取り確認し、関連設定をバックアップ。全体設定の自動リセットなし。
 - 1.0.2: Uninstallボタンを追加。
 - 1.0.3: saveShelfの二重拡張子問題を修正。異常なシェルフ名・ファイルを検出して中止。Uninstallは標準Shelf Editorを使う2段階方式に変更。
+- 1.0.4: 初回のInstall + Shelfを既定にし、再起動不要と明記。Uninstall案内をコード欄・コピーボタン付きQtダイアログに変更。削除処理は1.0.3の安全な2段階方式を維持。
 - 元の4ツールおよび既存アイコンは変更なし。
 
 ## 次のリリース
@@ -34,9 +35,9 @@ v1.0.0〜1.0.2から移行する場合は、旧Updateを使用せず、新ZIPの
 ツール本体を `scripts/ntools/tools/` 内の該当ファイルで上書きする。必要に応じ `release.py` のTOOLSリストでバージョン、説明等を修正する。アイコンは `scripts/ntools/icons/` に配置。配布に含めるファイルのハッシュを生成する：
 
 ```bash
-python release.py 1.0.3
+python release.py 1.0.4
 git add .
-git commit -m "Release nTools v1.0.3"
+git commit -m "Release nTools v1.0.4"
 git push
 ```
 
@@ -54,4 +55,4 @@ git push
 
 Python構文、ハッシュ、ZIP、ファイル置換、模擬Maya APIによる処理のテストを実施可能。実際のMaya 2027.2のUI動作、再起動後の保持、Mac環境およびGitHub接続は実機検証が必要。
 
-旧版の復旧手順とv1.0.3の検証条件はREADMEを参照。`saveShelf` の保存先は拡張子なしとする。
+旧版の復旧手順とv1.0.4の検証条件はREADMEを参照。`saveShelf` の保存先は拡張子なしとする。
