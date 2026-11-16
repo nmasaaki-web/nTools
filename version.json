@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "nTools",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "tools": [
     {
       "id": "sketchfab",
@@ -46,13 +46,14 @@
     }
   ],
   "files": {
-    "install.py": "075a1f965a3887999ac944a94d8953277fa6603e95ddfa8527dc7947aad0fad7",
+    "install.py": "c8f50a929a4071504bd8cca251ddad5d97697b6d53c6244dd9163ac30edd2a55",
     "scripts/ntools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
-    "scripts/ntools/tools/material_creator.py": "681389d5fd58611a7bcd0bf259621673b1a2550465d73ce044dfffe13f412173",
-    "scripts/ntools/tools/polyhaven_asset_browser.py": "1d083bae398f95ffb5bf366e522266497a287cf1094291c218072de2a491887c",
-    "scripts/ntools/tools/quadruped_quick_rig.py": "4dd7073ca5d8deaf32845168b9210851b396db5ca27de34f2c5dfbc24daf8b34",
-    "scripts/ntools/tools/sketchfab_asset_browser.py": "8221d6d7cd8631ad4b29daff927bdb683aa9771bc45cb3408728c1eb9d5e24b3",
+    "scripts/ntools/tools/material_creator.py": "36e16e108120600abddacec4a6415cb9ce408b78063720ca1542bb05bfcb00e1",
+    "scripts/ntools/tools/polyhaven_asset_browser.py": "ab13591e4d99d06591ee4d993adeca866b089b16f90ab4d62f8ca37de91c92fa",
+    "scripts/ntools/tools/quadruped_quick_rig.py": "490401df593f436e22ba5f9abc269e135dc3ca45a9682687f93067daf04842c2",
+    "scripts/ntools/tools/sketchfab_asset_browser.py": "758611e8a1c70d13ab7871d036242122963f77537102b2de654a27689eabcd90",
+    "scripts/ntools/icons/help.png": "21af284d81387fecac3ab4226f9378c03e1a84dcbb090f717c5a849a379c8f5d",
     "scripts/ntools/icons/material.png": "b946aa685512079926ea59f118b86a66f7286c95265fb269ede5331fd1d9d50a",
     "scripts/ntools/icons/polyhaven.png": "309e91197d7430f498e01429da59d11324d995135c2f69bff392657066814156",
     "scripts/ntools/icons/quadruped.png": "1e523eb8637d4801f4f08793b709efe561bfbd84b1bfa9ecf1048cdd6a308609",

@@ -16,6 +16,7 @@ import tempfile
 import traceback
 import urllib.request
 import uuid
+import webbrowser
 import zipfile
 
 REPO = 'https://github.com/nmasaaki-web/nTools'
@@ -24,7 +25,7 @@ SHELF = 'nTools'
 PACKAGE = 'ntools'
 MAX_BYTES = 32 * 1024 * 1024
 _RESTART_REQUIRED = False
-INSTALLER_VERSION = '1.0.4'
+INSTALLER_VERSION = '1.0.5'
 
 
 def _maya():
@@ -273,16 +274,31 @@ def _owned_shelf():
         if not cmds.shelfButton(full, exists=True): return False
         command = cmds.shelfButton(full, q=True, command=True) or ''
         if 'from ntools import installer as nt' not in command: return False
-        if not re.search(r"nt\.(?:launch\(|update\(|manage\(|uninstall_from_shelf\()", command): return False
+        if not re.search(r"nt\.(?:launch\(|update\(|manage\(|uninstall_from_shelf\(|help\()", command): return False
     return True
 
 
 def _layout_signature(m):
     return ([(t['id'],t['label'],t['short'],t['icon'],t['description']) for t in m['tools']],
-            'scripts/ntools/icons/uninstall.png' in m['files'])
+            'scripts/ntools/icons/uninstall.png' in m['files'],
+            'scripts/ntools/icons/help.png' in m['files'])
+
+
+def help():
+    """Open the GitHub student guide without modifying Maya or the shelf."""
+    try:
+        if not webbrowser.open(REPO):
+            raise RuntimeError('ブラウザを開けませんでした。')
+    except Exception as exc:
+        _notify(str(exc)+'\n'+REPO)
 
 
 def _management_button(kind):
+    if kind == 'help':
+        return dict(label='Help nTools', annotation='Open nTools Japanese user manuals',
+                    image1=(_target()/'icons'/'help.png').as_posix(),
+                    imageOverlayLabel='Help', sourceType='python',
+                    command=_command('nt.help()'))
     if kind == 'uninstall':
         return dict(label='Uninstall nTools', annotation='Uninstall nTools (confirmation required)',
                     image1=(_target()/'icons'/'uninstall.png').as_posix(),
@@ -321,7 +337,7 @@ def add_uninstall_button():
         expected=[_command('nt.launch('+repr(t['id'])+')').strip() for t in m['tools']]
         update_cmd=_command('nt.update()').strip()
         uninstall_cmd=_command('nt.uninstall_from_shelf()').strip()
-        if commands==expected+[uninstall_cmd,update_cmd]:
+        if commands in (expected+[uninstall_cmd,update_cmd], expected+[_command('nt.help()').strip(),uninstall_cmd,update_cmd]):
             _notify('Uninstallボタンは既に登録されています。');return
         if commands!=expected+[update_cmd]:
             raise RuntimeError('既知の旧シェルフ構成と一致しません。既存タブは変更しません。')
@@ -337,6 +353,53 @@ def add_uninstall_button():
         _notify('Uninstallボタンを追加しました。Mayaを再起動して確認してください。')
     except Exception as exc:
         traceback.print_exc(); _notify('ボタン追加中止：\n'+str(exc)+'\n自動でシェルフを削除・再構築しません。')
+
+
+def add_help_button():
+    """Explicit migration of an exact five/six-button managed shelf only."""
+    try:
+        if getattr(sys,'_ntools_restart_required',False):
+            _notify('先にMayaを再起動してください。'); return
+        before=_ui_snapshot(); cmds,_=_maya(); m=_installed()
+        if m is None or not (_target()/'icons'/'help.png').is_file():
+            raise RuntimeError('先にnTools v1.0.5以降を導入してください。')
+        shelf=_shelf()
+        if not cmds.shelfLayout(shelf,exists=True):
+            _notify('シェルフがありません。Repair Shelfを選択してください。'); return
+        if not _owned_shelf():
+            raise RuntimeError('管理対象外のボタンがあるため変更しません。')
+        paths=_button_paths(shelf)
+        commands=[(cmds.shelfButton(p,q=True,command=True) or '').strip() for p in paths]
+        expected=[_command('nt.launch('+repr(t['id'])+')').strip() for t in m['tools']]
+        u=_command('nt.update()').strip(); x=_command('nt.uninstall_from_shelf()').strip(); h=_command('nt.help()').strip()
+        if commands==expected+[h,x,u]:
+            _notify('Helpボタンは既に登録されています。'); return
+        if commands not in (expected+[u], expected+[x,u]):
+            raise RuntimeError('既知の旧シェルフ構成と一致しません。既存タブは変更しません。')
+        if not _confirm('nToolsにHelpを追加します。Help → Uninstall → Updateの順になります。\n他のシェルフは変更しません。','Add'): return
+        _backup_ui()
+        # Append new Update before editing old management buttons; leave tools intact.
+        parent=cmds.setParent(q=True)
+        try:
+            if commands==expected+[u]:
+                cmds.shelfButton(parent=shelf,**_management_button('uninstall'))
+                cmds.shelfButton(parent=shelf,**_management_button('update'))
+                cmds.shelfButton(paths[-1],e=True,**_management_button('help'))
+            else:
+                cmds.shelfButton(parent=shelf,**_management_button('update'))
+                cmds.shelfButton(paths[-1],e=True,**_management_button('uninstall'))
+                cmds.shelfButton(paths[-2],e=True,**_management_button('help'))
+            if _ui_snapshot()!=before: raise RuntimeError('Mayaのメニュー状態が変化しました。')
+            actual=[(cmds.shelfButton(p,q=True,command=True) or '').strip() for p in _button_paths(shelf)]
+            if actual!=expected+[h,x,u]: raise RuntimeError('ボタンの並びを確認できませんでした。')
+            _save_ntools_shelf()
+        finally:
+            if parent:
+                try: cmds.setParent(parent)
+                except RuntimeError: pass
+        _notify('Helpボタンを追加しました。今すぐ使用できます。')
+    except Exception as exc:
+        traceback.print_exc(); _notify('ボタン追加中止：\n'+str(exc)+'\nシェルフを自動削除・再構築しません。必要ならバックアップを確認してください。')
 
 
 def register_shelf(manifest=None):
@@ -355,6 +418,8 @@ def register_shelf(manifest=None):
         if not cmds.shelfLayout(shelf,exists=True): raise RuntimeError('Cannot create nTools shelf.')
         for t in m['tools']:
             cmds.shelfButton(parent=shelf,label=t['label'],annotation=t['label']+' | '+t['description'],image1=(_target()/'icons'/t['icon']).as_posix(),imageOverlayLabel=t['short'],sourceType='python',command=_command('nt.launch('+repr(t['id'])+')'))
+        if (_target()/'icons'/'help.png').is_file():
+            cmds.shelfButton(parent=shelf,**_management_button('help'))
         if (_target()/'icons'/'uninstall.png').is_file():
             cmds.shelfButton(parent=shelf,**_management_button('uninstall'))
         cmds.shelfButton(parent=shelf,**_management_button('update'))
@@ -505,9 +570,10 @@ def uninstall():
 
 def manage():
     cmds,_=_maya()
-    choice=cmds.confirmDialog(title='nTools Manager',message='nToolsの管理操作を選んでください。',button=['Update','Repair Shelf','Add Uninstall Button','Uninstall','Cancel'],defaultButton='Cancel',cancelButton='Cancel',dismissString='Cancel')
+    choice=cmds.confirmDialog(title='nTools Manager',message='nToolsの管理操作を選んでください。',button=['Update','Repair Shelf','Add Help Button','Add Uninstall Button','Uninstall','Cancel'],defaultButton='Cancel',cancelButton='Cancel',dismissString='Cancel')
     if choice=='Update': update()
     elif choice=='Repair Shelf': repair_shelf()
+    elif choice=='Add Help Button': add_help_button()
     elif choice=='Add Uninstall Button': add_uninstall_button()
     elif choice=='Uninstall': uninstall()
 
@@ -595,7 +661,7 @@ def install(source=None):
         if not exists and choice=='Files Only':
             note='本体のみ導入しました。管理画面のRepair Shelfでシェルフを登録してください。'
             note+='\n既存の本体を更新したため、先にMayaを再起動してください。' if restart else '\n初回導入は再起動不要です。'
-        if old and _layout_signature(old)!=_layout_signature(m): note+='\nボタン構成が変わりました。再起動後、管理メニューのAdd Uninstall Button（旧5ボタン用）またはRepair Shelf（未登録時）を利用してください。'
+        if old and _layout_signature(old)!=_layout_signature(m): note+='\nボタン構成が変わりました。再起動後、管理メニューのAdd Help Button（旧5・6ボタン用）またはRepair Shelf（未登録時）を利用してください。'
         _notify('インストール完了！ nTools '+m['version']+'\n'+note)
     except Exception as exc:
         traceback.print_exc();_notify('インストール失敗：\n'+str(exc)+'\n詳細は Script Editor を確認してください。')
@@ -614,7 +680,7 @@ def update():
         changed=_layout_signature(old)!=_layout_signature(m)
         if not _confirm('nTools '+old['version']+' → '+m['version']+'\n本体のみ更新します。シェルフは変更しません。\nシーンを保存し、ツールの作業を終えてください。\n更新後は Maya の再起動が必要です。','Update'):return
         _apply(m,payload)
-        _notify('更新完了：nTools '+m['version']+'\nMayaを再起動してください。'+('\nボタン構成が変わりました。再起動後、管理メニューのAdd Uninstall Button（旧5ボタン用）またはRepair Shelf（未登録時）を利用してください。' if changed else ''))
+        _notify('更新完了：nTools '+m['version']+'\nMayaを再起動してください。'+('\nボタン構成が変わりました。再起動後、管理メニューのAdd Help Button（旧5・6ボタン用）またはRepair Shelf（未登録時）を利用してください。' if changed else ''))
     except Exception as exc:
         traceback.print_exc();_notify('更新失敗：\n'+str(exc)+'\n詳細は Script Editor を確認してください。')
 

@@ -1113,7 +1113,8 @@ if QtWidgets is not None:
             self.resize(740,700); self.setMinimumSize(570,520)
             self._confirmed_copy_root=None; self.asset=None; self._busy=False; self._folder_choice=None
             layout=QtWidgets.QVBoxLayout(self); layout.setSpacing(9)
-            title=QtWidgets.QLabel('MATERIAL CREATOR'); title.setStyleSheet('font-size:18px;font-weight:bold;'); layout.addWidget(title)
+            title=QtWidgets.QLabel('MATERIAL CREATOR'); title.setStyleSheet('font-size:18px;font-weight:bold;')
+            header=QtWidgets.QHBoxLayout(); header.addWidget(title,1); help_btn=QtWidgets.QPushButton('Help'); help_btn.setToolTip('日本語マニュアルを開く'); help_btn.clicked.connect(lambda checked=False: QtGui.QDesktopServices.openUrl(QtCore.QUrl('https://github.com/nmasaaki-web/nTools/blob/main/docs/tools/material_creator.md'))); header.addWidget(help_btn); layout.addLayout(header)
             layout.addWidget(QtWidgets.QLabel('OpenPBR / Arnold  |  Material only  |  Maya 2027'))
             form=QtWidgets.QFormLayout(); layout.addLayout(form)
             self.mode=QtWidgets.QComboBox(); self.mode.addItems(['Texture Folder','JSON File']); form.addRow('Input type',self.mode)

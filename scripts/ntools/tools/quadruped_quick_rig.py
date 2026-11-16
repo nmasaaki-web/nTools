@@ -39,6 +39,7 @@ import json
 import math
 import re
 import traceback
+import webbrowser
 
 import maya.cmds as cmds
 import maya.api.OpenMaya as om
@@ -1174,7 +1175,10 @@ def show_ui():
                       widthHeight=(610, 830), sizeable=True)
     cmds.scrollLayout(childResizable=True)
     cmds.columnLayout(adjustableColumn=True, rowSpacing=9)
+    cmds.rowLayout(numberOfColumns=2, adjustableColumn=1, columnWidth2=(490, 80))
     cmds.text(l='QUADRUPED QUICK RIG v2.4', fn='boldLabelFont', align='left', h=25)
+    cmds.button(l='Help', annotation='日本語マニュアルを開く', c=lambda *_: webbrowser.open('https://github.com/nmasaaki-web/nTools/blob/main/docs/tools/quadruped.md'))
+    cmds.setParent('..')
     cmds.text(l='Y-up  /  +Z forward  /  +X = character left', align='left')
     cmds.text(l='新規キャラクター用 | 上から順番に操作してください。', align='left')
 

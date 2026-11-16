@@ -370,7 +370,8 @@ class Browser(QtWidgets.QDialog):
         self.grid_pending=0; self.grid_done=0; self.grid_failed=0
         self.placeholder=self.make_placeholder()
         layout=QtWidgets.QVBoxLayout(self)
-        layout.addWidget(QtWidgets.QLabel('Models provided by Sketchfab | Static glTF / OpenPBR'))
+        header=QtWidgets.QHBoxLayout(); header.addWidget(QtWidgets.QLabel('Models provided by Sketchfab | Static glTF / OpenPBR'),1)
+        help_btn=QtWidgets.QPushButton('Help'); help_btn.setToolTip('日本語マニュアルを開く'); help_btn.clicked.connect(lambda checked=False: self.guard(lambda: self.open_url('https://github.com/nmasaaki-web/nTools/blob/main/docs/tools/sketchfab.md'))); header.addWidget(help_btn); layout.addLayout(header)
         form=QtWidgets.QFormLayout(); self.token=QtWidgets.QLineEdit(); self.token.setEchoMode(QtWidgets.QLineEdit.Password)
         form.addRow('API token',self.token); layout.addLayout(form)
         self.button(layout,'Get your personal token (Sketchfab settings)',lambda: self.open_url('https://sketchfab.com/settings/password'))

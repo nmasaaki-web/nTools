@@ -1708,6 +1708,7 @@ if QtWidgets is not None:
         def make_native_ui(self):
             v=self.layout(); title=v.itemAt(0).widget(); title.setText('POLYHAVEN ASSET BROWSER')
             v.itemAt(1).widget().setText('Poly Haven online & local library   |   OpenPBR / Arnold')
+            v.takeAt(0); header=QtWidgets.QHBoxLayout(); header.addWidget(title,1); help_btn=QtWidgets.QPushButton('Help'); help_btn.setToolTip('日本語マニュアルを開く'); help_btn.clicked.connect(lambda checked=False: QtGui.QDesktopServices.openUrl(QtCore.QUrl('https://github.com/nmasaaki-web/nTools/blob/main/docs/tools/polyhaven.md'))); header.addWidget(help_btn); v.insertLayout(0,header)
             row=QtWidgets.QHBoxLayout()
             def button(layout,label,fn):
                 b=QtWidgets.QPushButton(label); b.clicked.connect(fn); layout.addWidget(b); return b
