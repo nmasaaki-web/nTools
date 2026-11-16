@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "nTools",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "tools": [
     {
       "id": "sketchfab",
@@ -22,6 +22,16 @@
       "version": "5.2",
       "icon": "polyhaven.png",
       "description": "Poly Haven assets, HDRI, local library and OpenPBR"
+    },
+    {
+      "id": "city",
+      "module": "maya_city_builder",
+      "entry": "show",
+      "label": "Maya City Builder",
+      "short": "CITY",
+      "version": "2.4.1",
+      "icon": "city.png",
+      "description": "OSM, PLATEAU, Procedural and Procedural Japan city geometry"
     },
     {
       "id": "material",
@@ -46,13 +56,15 @@
     }
   ],
   "files": {
-    "install.py": "c48ece181af76216760aba3a85d3b2171e3584e712c86f67910d93bdc5bd827a",
+    "install.py": "f719b46157525a3c2f87eccef70d6ce15b4081093d7a8560c995f2751a0ec263",
     "scripts/ntools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/material_creator.py": "36e16e108120600abddacec4a6415cb9ce408b78063720ca1542bb05bfcb00e1",
+    "scripts/ntools/tools/maya_city_builder.py": "e3200ff543c3974aa14426ef6323570692b8bc0e5be414503ab9059d370db8b9",
     "scripts/ntools/tools/polyhaven_asset_browser.py": "ab13591e4d99d06591ee4d993adeca866b089b16f90ab4d62f8ca37de91c92fa",
     "scripts/ntools/tools/quadruped_quick_rig.py": "490401df593f436e22ba5f9abc269e135dc3ca45a9682687f93067daf04842c2",
     "scripts/ntools/tools/sketchfab_asset_browser.py": "758611e8a1c70d13ab7871d036242122963f77537102b2de654a27689eabcd90",
+    "scripts/ntools/icons/city.png": "12c0f8a7e70ab282a9db18768d41881c41eb36d24e3b76e6000aa30c46418cec",
     "scripts/ntools/icons/help.png": "21af284d81387fecac3ab4226f9378c03e1a84dcbb090f717c5a849a379c8f5d",
     "scripts/ntools/icons/material.png": "b946aa685512079926ea59f118b86a66f7286c95265fb269ede5331fd1d9d50a",
     "scripts/ntools/icons/polyhaven.png": "309e91197d7430f498e01429da59d11324d995135c2f69bff392657066814156",

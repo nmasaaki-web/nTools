@@ -1,4 +1,4 @@
-# nTools 管理者向けガイド v1.0.7
+# nTools 管理者向けガイド v1.0.8
 
 ## 公開・移行
 
@@ -6,7 +6,7 @@ ZIPの中身を既存のGit作業フォルダに上書きコピーする。`.git
 
 ```bash
 git add .
-git commit -m "Release nTools v1.0.7 - shelf separator"
+git commit -m "Release nTools v1.0.8 - Add City Builder"
 git push
 ```
 
@@ -16,9 +16,9 @@ v1.0.0〜1.0.2から移行する場合は、旧Updateを使用せず、新ZIPの
 
 1. Mayaの設定フォルダをMaya終了中に別の場所へコピーし、復旧できるようにする。既存の制作シーンは保存する。可能なら検証専用OSユーザーを使用する。
 2. 起動してFile等のメニュー、メニューセット、他シェルフを確認。新規環境でInstall + Shelfを選択する（Files Onlyによる段階テストも可能）。
-3. 再起動せず4ツール、Separator、Help、Uninstall、Updateを確認し、各ツールの起動を試す。Files Onlyを選んだ場合は管理コードからRepair Shelfを選択する。
+3. 再起動せず5ツール、Separator、Help、Uninstall、Updateを確認し、各ツールの起動を試す。Files Onlyを選んだ場合は管理コードからRepair Shelfを選択する。
 4. Maya再起動後にシェルフが残ること、File等のメニューが表示されることを確認。
-5. v1.0.3〜1.0.6の5・6・7ボタン環境からUpdate → 再起動 → Updateを試す。RIG → Separator → Help → Uninstall → Updateの順、重複なし、元のツールとUpdateボタンの維持、再起動後の保持を確認。7ボタン＋Separator環境では通常更新でシェルフ保存が発生しないこと、カスタムボタンがある場合は自動同期しないことを確認。
+5. v1.0.3〜1.0.7の5・6・7ボタン環境からUpdate → 再起動 → Updateを試す。SF → PH → CITY → MAT → RIG → Separator → Help → Uninstall → Updateの順、重複なし、元のツールとUpdateボタンの維持、再起動後の保持を確認。8ボタン＋Separator環境では通常更新でシェルフ保存が発生しないこと、カスタムボタンがある場合は自動同期しないことを確認。
 6. Uninstallは2段階：案内ウィンドウで「コピー」を押し、コードがクリップボードに入ることを確認。メモ帳などに保存してからMaya標準Shelf EditorでnToolsだけを削除・保存し再起動。Pythonタブでコピーしたコードを実行し、確認後に本体をバックアップへ移動する。自動シェルフ削除は行わない。
 
 ## 変更履歴と設計
@@ -33,18 +33,20 @@ v1.0.0〜1.0.2から移行する場合は、旧Updateを使用せず、新ZIPの
 - 1.0.7: RIGとHelpの間にMaya標準の縦Separatorを追加。新規登録・既存シェルフ同期・所有判定に対応。
 - 1.0.6: Updateに管理ボタン同期を追加。最新版でも同期し、既知の旧構成にHelp / Uninstallのみ追加。MayaのshelfLayout positionで並べ、既存Updateボタンは変更しない。シェルフ全体の削除・再構築なし。
 
+- 1.0.8: City Builder v2.4.1（nTools起動・個別Help）とアイコン・日本語マニュアルを追加。既知の旧構成にCITYを追加し、MATの左へ移動。元の4ツールは削除・再作成しない。
+
 ## 次のリリース
 
 ツール本体を `scripts/ntools/tools/` 内の該当ファイルで上書きする。必要に応じ `release.py` のTOOLSリストでバージョン、説明等を修正する。アイコンは `scripts/ntools/icons/` に配置。配布に含めるファイルのハッシュを生成する：
 
 ```bash
-python release.py 1.0.7
+python release.py 1.0.8
 git add .
-git commit -m "Release nTools v1.0.7"
+git commit -m "Release nTools v1.0.8"
 git push
 ```
 
-更新時はバージョン番号を必ず増加させる。v1.0.7以降のUpdateは不足する管理ボタンとSeparatorを自動同期する。旧版からv1.0.7への移行時は再起動後のUpdateがもう一度必要。将来の新しいツールの追加・削除やボタンの順序・説明・アイコンファイル名変更がある場合、学生は更新後に既存nToolsタブをMayaのShelf Editorで削除・保存し、再起動後Repair Shelfを実行する。通常のツール本体変更だけなら不要。既存ボタンの説明やバージョン表記（旧版シェルフ）は自動更新されない。
+更新時はバージョン番号を必ず増加させる。v1.0.8のUpdateは既知の旧構成に不足するCITY・管理ボタン・Separatorを自動追加する。旧版からv1.0.8への移行時は再起動後のUpdateがもう一度必要。旧版が構成不一致を表示しても本体更新済みなら再起動してUpdateを実行する。今回のCITY以外の将来の新しいツールの追加・削除やボタンの順序・説明・アイコンファイル名変更がある場合、学生は更新後に既存nToolsタブをMayaのShelf Editorで削除・保存し、再起動後Repair Shelfを実行する。通常のツール本体変更だけなら不要。既存ボタンの説明やバージョン表記（旧版シェルフ）は自動更新されない。
 
 ## 復旧
 
@@ -58,4 +60,4 @@ git push
 
 Python構文、ハッシュ、ZIP、ファイル置換、模擬Maya APIによる処理のテストを実施可能。実際のMaya 2027.2のUI動作、再起動後の保持、Mac環境およびGitHub接続は実機検証が必要。
 
-旧版の復旧手順とv1.0.7の検証条件はREADMEを参照。`saveShelf` の保存先は拡張子なしとする。
+旧版の復旧手順とv1.0.8の検証条件はREADMEを参照。`saveShelf` の保存先は拡張子なしとする。

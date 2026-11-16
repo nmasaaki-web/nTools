@@ -25,7 +25,7 @@ SHELF = 'nTools'
 PACKAGE = 'ntools'
 MAX_BYTES = 32 * 1024 * 1024
 _RESTART_REQUIRED = False
-INSTALLER_VERSION = '1.0.7'
+INSTALLER_VERSION = '1.0.8'
 _SEPARATOR = '<ntools:shelf-separator>'
 _SHELF_SAVE_PENDING = False
 _UPDATE_BUSY = False
@@ -347,11 +347,20 @@ def add_uninstall_button():
     add_help_button()
 
 
-def _sync_management_buttons(m):
-    """Add a native separator and missing management buttons, without rebuild.
+def _tool_button(t):
+    return dict(label=t['label'], annotation=t['label']+' | '+t['description'],
+                image1=(_target()/'icons'/t['icon']).as_posix(),
+                imageOverlayLabel=t['short'], sourceType='python',
+                command=_command('nt.launch('+repr(t['id'])+')'))
 
-    A known partial tail is retryable. Unknown/custom controls, duplicate
-    separators and changes to the four tool buttons are never auto-edited.
+
+def _sync_management_buttons(m):
+    """Migrate the known four-tool layout to five tools plus management.
+
+    Only City Builder and missing management controls may be inserted.
+    Never delete/rebuild the shelf or move the four original tool buttons.
+    A partial insertion (e.g. City appended before move) is retryable.
+    Unknown, duplicate, missing original or reordered original controls stop.
     """
     global _SHELF_SAVE_PENDING
     cmds, _ = _maya()
@@ -361,43 +370,60 @@ def _sync_management_buttons(m):
         return 'nToolsシェルフがありません。Repair Shelfで登録してください。'
     if not _owned_shelf():
         raise RuntimeError('管理対象外の項目があります。シェルフは変更しません。')
-    expected = [_command('nt.launch('+repr(t['id'])+')').strip() for t in m['tools']]
+    tools = m['tools']
+    ids = [t['id'] for t in tools]
+    if ids != ['sketchfab','polyhaven','city','material','quadruped']:
+        raise RuntimeError('未対応のツール構成です。シェルフは変更しません。')
+    expected = [_tool_button(t)['command'].strip() for t in tools]
+    city = expected[2]
+    original = [c for c in expected if c != city]
     kinds = ('help','uninstall','update')
     command_for = {k: _management_button(k)['command'].strip() for k in kinds}
     desired = [k for k in kinds if 'scripts/ntools/icons/'+k+'.png' in m['files']]
     if 'update' not in desired: raise RuntimeError('Update icon is missing from manifest.')
-    paths = _button_paths(shelf)
-    items = [_shelf_item(p) for p in paths]
-    n = len(expected)
-    tail = items[n:]
     target_tail = [_SEPARATOR] + [command_for[k] for k in desired]
-    if items[:n] != expected or len(tail) != len(set(tail)) or not set(tail) <= set(target_tail) or command_for['update'] not in tail:
-        raise RuntimeError('既知のnTools構成と一致しません。シェルフは変更しません。')
     goal = expected + target_tail
+    items = [_shelf_item(p) for p in _button_paths(shelf)]
+    # Ignore City while testing the legacy prefix. City may be appended if
+    # a previous position call failed. Do not accept custom/duplicate controls.
+    legacy = [c for c in items if c != city]
+    tail = legacy[len(original):]
+    if (len(items) != len(set(items)) or legacy[:len(original)] != original
+            or not set(tail) <= set(target_tail) or command_for['update'] not in tail):
+        raise RuntimeError('既知のnTools構成と一致しません。シェルフは変更しません。')
     if items == goal and not _SHELF_SAVE_PENDING:
         return 'シェルフ：最新のボタン構成です。'
+    for t in tools:
+        if not (_target()/'icons'/t['icon']).is_file():
+            raise RuntimeError('Missing icon: '+t['icon'])
     for kind in desired:
         if not (_target()/'icons'/(kind+'.png')).is_file():
             raise RuntimeError('Missing icon: '+kind)
     backup = _backup_ui()
     parent = cmds.setParent(q=True)
     added = []
+    def move_to(wanted, index):
+        current = _button_paths(shelf)
+        actual = [_shelf_item(p) for p in current]
+        if actual[index-1] != wanted:
+            p = current[actual.index(wanted)]
+            cmds.shelfLayout(shelf,e=True,position=(p.split('|')[-1],index))
     try:
         _SHELF_SAVE_PENDING = True
-        if _SEPARATOR not in tail:
+        if city not in items:
+            cmds.shelfButton(parent=shelf, **_tool_button(tools[2]))
+            added.append('City Builder')
+        if _SEPARATOR not in items:
             _new_separator(shelf)
             added.append('Separator')
         for kind in desired:
-            if command_for[kind] not in tail:
+            if command_for[kind] not in items:
                 cmds.shelfButton(parent=shelf, **_management_button(kind))
                 added.append(kind.title())
-        # Move only the separator and management controls, never tool buttons.
-        for index, wanted in enumerate(target_tail, n+1):
-            current = _button_paths(shelf)
-            actual = [_shelf_item(p) for p in current]
-            if actual[index-1] != wanted:
-                p = current[actual.index(wanted)]
-                cmds.shelfLayout(shelf,e=True,position=(p.split('|')[-1],index))
+        # The four old tool controls retain their relative order and commands.
+        move_to(city, 3)
+        for index, wanted in enumerate(target_tail, len(expected)+1):
+            move_to(wanted, index)
         actual = [_shelf_item(p) for p in _button_paths(shelf)]
         if actual != goal: raise RuntimeError('シェルフの項目順序が一致しません。')
         if _ui_snapshot()!=before: raise RuntimeError('Mayaのメニュー状態が変化しました。')
@@ -405,7 +431,6 @@ def _sync_management_buttons(m):
         if _ui_snapshot()!=before: raise RuntimeError('Mayaのメニュー状態が変化しました。')
         _SHELF_SAVE_PENDING = False
     except Exception as exc:
-        # Do not delete/rebuild a live shelf; retry known partial tails only.
         raise RuntimeError(str(exc)+'\nシェルフ操作を中止しました。バックアップ：'+str(backup)+'\nUIが正常ならUpdateで再試行できます。') from exc
     finally:
         if parent:
@@ -421,8 +446,8 @@ def add_help_button():
             _notify('先にMayaを再起動してください。'); return
         m = _installed()
         if m is None or 'scripts/ntools/icons/help.png' not in m['files']:
-            raise RuntimeError('先にnTools v1.0.7以降を導入してください。')
-        if not _confirm('nToolsの管理ボタンとSeparatorを確認・追加します。既存のタブは削除しません。','Add'): return
+            raise RuntimeError('先にnTools v1.0.8以降を導入してください。')
+        if not _confirm('nToolsのCity Builder・管理ボタン・Separatorを確認・追加します。既存のタブは削除しません。','Add'): return
         _notify(_sync_management_buttons(m))
     except Exception as exc:
         traceback.print_exc(); _notify('ボタン追加中止：\n'+str(exc))
@@ -443,7 +468,7 @@ def register_shelf(manifest=None):
         mel.eval('addNewShelfTab "nTools";')
         if not cmds.shelfLayout(shelf,exists=True): raise RuntimeError('Cannot create nTools shelf.')
         for t in m['tools']:
-            cmds.shelfButton(parent=shelf,label=t['label'],annotation=t['label']+' | '+t['description'],image1=(_target()/'icons'/t['icon']).as_posix(),imageOverlayLabel=t['short'],sourceType='python',command=_command('nt.launch('+repr(t['id'])+')'))
+            cmds.shelfButton(parent=shelf, **_tool_button(t))
         _new_separator(shelf)
         if (_target()/'icons'/'help.png').is_file():
             cmds.shelfButton(parent=shelf,**_management_button('help'))
@@ -675,7 +700,7 @@ def install(source=None):
         old=_installed(); cmds,_=_maya(); exists=cmds.shelfLayout(_shelf(),exists=True)
         if old is None and exists: raise RuntimeError('同名の既存シェルフがあります。変更しません。')
         if old and _version(m['version'])<_version(old['version']): raise RuntimeError('旧版はインストールできません。')
-        msg='nTools '+m['version']+' を導入します。\n既存のシェルフは削除・再構築しません。\nInstall + Shelfでは不足する管理ボタンとSeparatorのみ追加します。'
+        msg='nTools '+m['version']+' を導入します。\n既存のシェルフは削除・再構築しません。\nInstall + Shelfでは不足するCity Builder・管理ボタン・Separatorのみ追加します。'
         if old is None: msg+='\n初回導入は再起動不要です。'
         choice=cmds.confirmDialog(title='nTools',message=msg,button=['Install + Shelf','Files Only','Cancel'],defaultButton='Install + Shelf',cancelButton='Cancel',dismissString='Cancel')
         if choice not in ('Install + Shelf','Files Only'):return
@@ -699,7 +724,7 @@ def install(source=None):
 
 
 def update():
-    """Update package and synchronize the known management buttons.
+    """Update package and synchronize the known City Builder and management buttons.
 
     Old v1.0.3–1.0.5 updaters cannot run this new code until restart. On the
     next click, even an already-current manifest triggers shelf sync.
@@ -718,7 +743,7 @@ def update():
         m,payload = _online()
         newer = _version(m['version']) > _version(old['version'])
         if newer:
-            if not _confirm('nTools '+old['version']+' → '+m['version']+'\n本体を更新し、不足する管理ボタンとSeparatorがあれば追加します。\nシェルフは削除・再構築しません。シーンを保存し、ツールの作業を終えてください。\n本体更新後はMayaの再起動が必要です。','Update'): return
+            if not _confirm('nTools '+old['version']+' → '+m['version']+'\n本体を更新し、不足するCity Builder・管理ボタン・Separatorがあれば追加します。\nシェルフは削除・再構築しません。シーンを保存し、ツールの作業を終えてください。\n本体更新後はMayaの再起動が必要です。','Update'): return
             _apply(m,payload)
             title = '更新完了：nTools '+m['version']+'\n本体の反映にはMayaを再起動してください。'
         else:
