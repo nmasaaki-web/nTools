@@ -1,4 +1,4 @@
-# nTools 管理者向けガイド v1.0.2
+# nTools 管理者向けガイド v1.0.3
 
 ## 公開・移行
 
@@ -6,11 +6,11 @@ ZIPの中身を既存のGit作業フォルダに上書きコピーする。`.git
 
 ```bash
 git add .
-git commit -m "Release nTools v1.0.2 - safer installer"
+git commit -m "Release nTools v1.0.3 - safer installer"
 git push
 ```
 
-旧v1.0.0ユーザーは古いUpdateボタンを使用せず、新ZIPのinstall.pyから手動移行。既存シェルフを保持する。v1.0.1以降は通常Updateを利用できる。v1.0.1からv1.0.2へ更新後は再起動し、管理メニューのAdd Uninstall Buttonを選ぶ。
+v1.0.0〜1.0.2から移行する場合は、旧Updateを使用せず、新ZIPのinstall.pyから導入する。異常なタブ名がある場合はREADMEの復旧手順を先に実施。
 
 ## 実機検証手順（Windows / macOS）
 
@@ -19,13 +19,14 @@ git push
 3. Maya再起動後、UIが正常ならREADMEの管理コードからRepair Shelfを選択する。4ツール、Uninstall、Updateを確認し、各ツールの起動を試す。
 4. Maya再起動後にシェルフが残ること、File等のメニューが表示されることを確認。
 5. Updateボタンで最新版判定を確認。次のテスト版を公開して更新するとき、既存シェルフのボタン数・順序、メニューが変化しないことを確認。
-6. 検証用環境でUninstallを試し、Mayaの削除確認、再起動後のnTools消失、他タブとメニューの維持を確認。キャンセル時に本体が残ることも確認。
+6. Uninstallは2段階：Maya標準Shelf EditorでnToolsだけを削除・保存し再起動後、管理画面のUninstallから本体をバックアップへ移動する。自動シェルフ削除は行わない。
 
 ## 変更履歴と設計
 
 - 1.0.0: 初回配布。通常更新でもシェルフを再構築。
 - 1.0.1: パッケージ置換をシェルフ操作から分離。既存タブは再構築しない。修復は欠落タブに限定。Maya公式addNewShelfTab / deleteShelfTabを使用し、独自deleteUIでタブを削除しない。メニューセットを読み取り確認し、関連設定をバックアップ。全体設定の自動リセットなし。
-- 1.0.2: Uninstallボタンを追加。削除は遅延実行、確認の初期選択はCancel。旧5ボタンへの明示的追加機能を搭載。
+- 1.0.2: Uninstallボタンを追加。
+- 1.0.3: saveShelfの二重拡張子問題を修正。異常なシェルフ名・ファイルを検出して中止。Uninstallは標準Shelf Editorを使う2段階方式に変更。
 - 元の4ツールおよび既存アイコンは変更なし。
 
 ## 次のリリース
@@ -52,3 +53,5 @@ git push
 ## 検証範囲
 
 Python構文、ハッシュ、ZIP、ファイル置換、模擬Maya APIによる処理のテストを実施可能。実際のMaya 2027.2のUI動作、再起動後の保持、Mac環境およびGitHub接続は実機検証が必要。
+
+旧版の復旧手順とv1.0.3の検証条件はREADMEを参照。`saveShelf` の保存先は拡張子なしとする。

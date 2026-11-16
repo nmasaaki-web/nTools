@@ -24,7 +24,7 @@ SHELF = 'nTools'
 PACKAGE = 'ntools'
 MAX_BYTES = 32 * 1024 * 1024
 _RESTART_REQUIRED = False
-INSTALLER_VERSION = '1.0.2'
+INSTALLER_VERSION = '1.0.3'
 
 
 def _maya():
@@ -175,6 +175,52 @@ def _shelf_path():
     return Path(cmds.internalVar(userShelfDir=True)) / ('shelf_'+SHELF+'.mel')
 
 
+def _check_shelf_names():
+    """Reject malformed nTools tabs/files before shelf operations.
+
+    Older releases passed a .mel suffix to saveShelf, which adds it itself.
+    Never auto-delete malformed legacy prefs: Maya must be closed for recovery.
+    """
+    cmds, _ = _maya()
+    top = _shelf_parent()
+    tabs = cmds.shelfTabLayout(top, q=True, childArray=True) or []
+    names = [t.split('|')[-1] for t in tabs]
+    bad = [n for n in names if n.casefold().startswith('ntools.')]
+    folder = _shelf_path().parent
+    if folder.is_dir():
+        bad += [f.name for f in folder.iterdir()
+                if f.name.casefold().startswith('shelf_ntools.mel.mel')]
+    # Maya tracks shelf names and file basenames in numbered optionVars.
+    # Read only; do not rewrite global shelf preferences.
+    if cmds.optionVar(exists='numShelves'):
+        count = int(cmds.optionVar(q='numShelves'))
+        if count < 0 or count > 1000:
+            raise RuntimeError('Unexpected Maya shelf preference count.')
+        for i in range(1, count+1):
+            for key in ('shelfName', 'shelfFile'):
+                k = key+str(i)
+                if cmds.optionVar(exists=k):
+                    v = str(cmds.optionVar(q=k)).replace('\\','/').split('/')[-1]
+                    if v.casefold().startswith(('ntools.', 'shelf_ntools.mel.mel')):
+                        bad.append(k+'='+v)
+    if bad or names.count(SHELF)>1:
+        raise RuntimeError('旧版の不正なnToolsシェルフが残っています。Mayaを終了し、READMEの復旧手順を実行してください。\n'+', '.join(bad))
+
+
+def _save_ntools_shelf():
+    """Maya saveShelf accepts a basename, not a filename with .mel."""
+    cmds, _ = _maya()
+    _check_shelf_names()
+    path = _shelf_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Maya appends .mel. Passing path itself creates shelf_nTools.mel.mel.
+    if not cmds.saveShelf(SHELF, path.with_suffix('').as_posix()):
+        raise RuntimeError('Could not save nTools shelf.')
+    if not path.is_file():
+        raise RuntimeError('Expected shelf_nTools.mel was not created.')
+    _check_shelf_names()
+
+
 def _command(action):
     # Resolve per-user paths when clicked, not the teacher's machine path.
     return ('import sys, maya.cmds as cmds\n'
@@ -193,6 +239,7 @@ def _ui_snapshot():
     top = _shelf_parent()
     if not top or not cmds.shelfTabLayout(top, exists=True):
         raise RuntimeError('Mayaのシェルフが利用できません。UIを復旧してください。')
+    _check_shelf_names()
     return (sets, current, tuple(cmds.menuSet(q=True, menuArray=True) or []))
 
 
@@ -286,8 +333,7 @@ def add_uninstall_button():
         cmds.shelfButton(paths[-1],e=True,**_management_button('uninstall'))
         if _ui_snapshot()!=before:
             raise RuntimeError('Mayaのメニュー状態が変化しました。追加操作を中止しました。')
-        if not cmds.saveShelf(SHELF,_shelf_path().as_posix()):
-            raise RuntimeError('シェルフを保存できませんでした。')
+        _save_ntools_shelf()
         _notify('Uninstallボタンを追加しました。Mayaを再起動して確認してください。')
     except Exception as exc:
         traceback.print_exc(); _notify('ボタン追加中止：\n'+str(exc)+'\n自動でシェルフを削除・再構築しません。')
@@ -314,8 +360,7 @@ def register_shelf(manifest=None):
         cmds.shelfButton(parent=shelf,**_management_button('update'))
         if _ui_snapshot()!=before: raise RuntimeError('Mayaのメニュー状態が変化しました。作業を中止しました。')
         # Save only this shelf, not all Maya preferences.
-        path=_shelf_path(); path.parent.mkdir(parents=True,exist_ok=True)
-        if not cmds.saveShelf(SHELF,path.as_posix()): raise RuntimeError('Could not save nTools shelf.')
+        _save_ntools_shelf()
         if _ui_snapshot()!=before: raise RuntimeError('Mayaのメニュー状態が変化しました。バックアップを確認してください。')
     finally:
         # Do not try to delete a partially created shelf in an error handler.
@@ -342,30 +387,42 @@ def repair_shelf():
 
 
 def uninstall_from_shelf():
-    # Do not delete a shelf while its own button callback is executing.
-    from maya.utils import executeDeferred
-    executeDeferred(uninstall)
+    # No automatic deletion of a running Maya shelf. Guide user to native UI.
+    uninstall()
 
 
 def uninstall():
-    """Conservative uninstall: Maya handles its own shelf deletion; archive package."""
+    """Two-stage uninstall; never delete a live shelf programmatically."""
     try:
-        _ui_snapshot(); cmds,mel=_maya(); dest=_target()
+        _ui_snapshot(); cmds,_=_maya(); dest=_target()
         if getattr(sys,'_ntools_restart_required',False):
-            _notify('先にMayaを再起動してください。');return
+            _notify('先にMayaを再起動してください。'); return
         if _installed() is None: raise RuntimeError('認識できるnTools本体がありません。変更しません。')
-        if not _confirm('nToolsを削除します。シーン・他のシェルフは変更しません。\nシーンを保存し、nToolsのウィンドウを閉じてから実行してください。\n本体はバックアップに移動します。削除後はMayaを再起動してください。','Uninstall'):return
         if cmds.shelfLayout(_shelf(),exists=True):
-            if not _owned_shelf(): raise RuntimeError('nToolsシェルフに未確認のボタンがあります。Shelf Editorで手動削除してください。')
-            _backup_ui(); before=_ui_snapshot()
-            mel.eval('deleteShelfTab "nTools";')
-            if cmds.shelfLayout(_shelf(),exists=True): return  # cancelled
-            if _ui_snapshot()!=before: raise RuntimeError('メニュー状態が変化しました。本体を保持します。')
+            if not _owned_shelf():
+                raise RuntimeError('nToolsシェルフに未確認のボタンがあります。自動削除しません。')
+            _backup_ui()
+            _notify('安全のため、Maya標準のShelf EditorでnToolsタブだけを削除してください。\n'
+                    'Save All Shelvesで保存し、Mayaを再起動します。\n'
+                    '再起動後、Script Editorで from ntools import installer as nt; nt.manage() を実行し、Uninstallを選択してください。\n'
+                    'この段階ではシェルフも本体も削除していません。')
+            return
+        # Check persistent registrations before moving the package.
         if _shelf_path().exists():
-            raise RuntimeError('シェルフファイルが残っています。Mayaで削除を保存し、再起動後に再実行してください。')
+            raise RuntimeError('シェルフファイルが残っています。Shelf Editorで削除・保存し、再起動してください。')
+        if cmds.optionVar(exists='numShelves'):
+            count=int(cmds.optionVar(q='numShelves'))
+            for i in range(1,count+1):
+                for key in ('shelfName','shelfFile'):
+                    k=key+str(i)
+                    if cmds.optionVar(exists=k):
+                        v=str(cmds.optionVar(q=k)).replace('\\','/').split('/')[-1].casefold()
+                        if v in ('ntools','shelf_ntools','shelf_ntools.mel'):
+                            raise RuntimeError('nToolsのシェルフ登録情報が残っています。Mayaを再起動して確認してください。')
+        if not _confirm('nTools本体を復元可能なバックアップに移動します。\nシーン・他のシェルフ・Maya.envは変更しません。\n作業を保存し、nToolsのウィンドウを閉じてください。','Uninstall'):return
         backup=dest.parent/('.ntools-uninstalled-'+uuid.uuid4().hex)
         dest.rename(backup); sys._ntools_restart_required=True
-        _notify('nToolsをアンインストールしました。Mayaを再起動してください。\nバックアップ：'+str(backup))
+        _notify('nTools本体をアンインストールしました。Mayaを再起動してください。\nバックアップ：'+str(backup))
     except Exception as exc:
         traceback.print_exc(); _notify('アンインストール中止：\n'+str(exc))
 

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "nTools",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "tools": [
     {
       "id": "sketchfab",
@@ -46,7 +46,7 @@
     }
   ],
   "files": {
-    "install.py": "93552514b273c8f473d43cc5b9d8922c488cc30bd0f23b9d89932dd5c802fcdf",
+    "install.py": "ec33c337ab2cdea3f907faeaac8317a1aef08df598d8655fabff3e658d7b8cd4",
     "scripts/ntools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/material_creator.py": "681389d5fd58611a7bcd0bf259621673b1a2550465d73ce044dfffe13f412173",
