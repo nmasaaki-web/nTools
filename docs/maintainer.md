@@ -1,4 +1,4 @@
-# nTools 管理者向けガイド v1.0.1
+# nTools 管理者向けガイド v1.0.2
 
 ## 公開・移行
 
@@ -6,17 +6,17 @@ ZIPの中身を既存のGit作業フォルダに上書きコピーする。`.git
 
 ```bash
 git add .
-git commit -m "Release nTools v1.0.1 - safer installer"
+git commit -m "Release nTools v1.0.2 - safer installer"
 git push
 ```
 
-旧v1.0.0ユーザーは古いUpdateボタンを使用せず、新ZIPのinstall.pyから手動移行。既存シェルフを保持する。v1.0.1以降は通常Updateを利用できる。
+旧v1.0.0ユーザーは古いUpdateボタンを使用せず、新ZIPのinstall.pyから手動移行。既存シェルフを保持する。v1.0.1以降は通常Updateを利用できる。v1.0.1からv1.0.2へ更新後は再起動し、管理メニューのAdd Uninstall Buttonを選ぶ。
 
 ## 実機検証手順（Windows / macOS）
 
 1. Mayaの設定フォルダをMaya終了中に別の場所へコピーし、復旧できるようにする。既存の制作シーンは保存する。可能なら検証専用OSユーザーを使用する。
 2. 起動してFile等のメニュー、メニューセット、他シェルフを確認。Files Onlyで導入する。
-3. Maya再起動後、UIが正常ならREADMEの管理コードからRepair Shelfを選択する。4ツールとUpdateを確認し、各ツールの起動を試す。
+3. Maya再起動後、UIが正常ならREADMEの管理コードからRepair Shelfを選択する。4ツール、Uninstall、Updateを確認し、各ツールの起動を試す。
 4. Maya再起動後にシェルフが残ること、File等のメニューが表示されることを確認。
 5. Updateボタンで最新版判定を確認。次のテスト版を公開して更新するとき、既存シェルフのボタン数・順序、メニューが変化しないことを確認。
 6. 検証用環境でUninstallを試し、Mayaの削除確認、再起動後のnTools消失、他タブとメニューの維持を確認。キャンセル時に本体が残ることも確認。
@@ -25,16 +25,17 @@ git push
 
 - 1.0.0: 初回配布。通常更新でもシェルフを再構築。
 - 1.0.1: パッケージ置換をシェルフ操作から分離。既存タブは再構築しない。修復は欠落タブに限定。Maya公式addNewShelfTab / deleteShelfTabを使用し、独自deleteUIでタブを削除しない。メニューセットを読み取り確認し、関連設定をバックアップ。全体設定の自動リセットなし。
-- 元の4ツールおよびアイコンは変更なし。
+- 1.0.2: Uninstallボタンを追加。削除は遅延実行、確認の初期選択はCancel。旧5ボタンへの明示的追加機能を搭載。
+- 元の4ツールおよび既存アイコンは変更なし。
 
 ## 次のリリース
 
 ツール本体を `scripts/ntools/tools/` 内の該当ファイルで上書きする。必要に応じ `release.py` のTOOLSリストでバージョン、説明等を修正する。アイコンは `scripts/ntools/icons/` に配置。配布に含めるファイルのハッシュを生成する：
 
 ```bash
-python release.py 1.0.2
+python release.py 1.0.3
 git add .
-git commit -m "Release nTools v1.0.2"
+git commit -m "Release nTools v1.0.3"
 git push
 ```
 

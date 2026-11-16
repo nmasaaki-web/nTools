@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "nTools",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "tools": [
     {
       "id": "sketchfab",
@@ -46,7 +46,7 @@
     }
   ],
   "files": {
-    "install.py": "f6cd2bd47703e509423e836f52d1aa3a6fc84149f7bc03cc40d2fa4d9f3d920a",
+    "install.py": "93552514b273c8f473d43cc5b9d8922c488cc30bd0f23b9d89932dd5c802fcdf",
     "scripts/ntools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/material_creator.py": "681389d5fd58611a7bcd0bf259621673b1a2550465d73ce044dfffe13f412173",
@@ -57,6 +57,7 @@
     "scripts/ntools/icons/polyhaven.png": "309e91197d7430f498e01429da59d11324d995135c2f69bff392657066814156",
     "scripts/ntools/icons/quadruped.png": "1e523eb8637d4801f4f08793b709efe561bfbd84b1bfa9ecf1048cdd6a308609",
     "scripts/ntools/icons/sketchfab.png": "7e7d5d5dc7b829d348f1fe3632edf266e4236920e606c8cdadc845f5b7f2805a",
+    "scripts/ntools/icons/uninstall.png": "3d64db800b4a1bf915c047315f860ede575db6c15f0a55a9da9ace0bc79e30aa",
     "scripts/ntools/icons/update.png": "591e975631fc65039d20ae3be53c2951eb9f47e3ec4c2490fe49d71a3a3185ff"
   }
 }
