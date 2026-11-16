@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintainer: python release.py 1.0.8 (outside Maya)."""
+"""Maintainer: python release.py 1.0.9 (outside Maya)."""
 import hashlib
 import json
 from pathlib import Path
@@ -16,7 +16,7 @@ TOOLS=[
 ]
 
 def main(version):
-    if not re.fullmatch(r'\d+\.\d+\.\d+',version):raise ValueError('Use x.y.z, e.g. 1.0.8')
+    if not re.fullmatch(r'\d+\.\d+\.\d+',version):raise ValueError('Use x.y.z, e.g. 1.0.9')
     pkg=ROOT/'scripts'/'ntools'
     paths=[ROOT/'install.py',pkg/'__init__.py']+sorted((pkg/'tools').glob('*.py'))+sorted((pkg/'icons').glob('*.png'))
     for p in paths:
@@ -28,5 +28,5 @@ def main(version):
     print('Manifest generated:',version)
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('Usage: python release.py 1.0.8')
+    if len(sys.argv)!=2:raise SystemExit('Usage: python release.py 1.0.9')
     main(sys.argv[1])

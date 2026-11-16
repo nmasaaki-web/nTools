@@ -1,4 +1,4 @@
-# nTools 管理者向けガイド v1.0.8
+# nTools 管理者向けガイド v1.0.9
 
 ## 公開・移行
 
@@ -6,7 +6,7 @@ ZIPの中身を既存のGit作業フォルダに上書きコピーする。`.git
 
 ```bash
 git add .
-git commit -m "Release nTools v1.0.8 - Add City Builder"
+git commit -m "Release nTools v1.0.9 - Installer consent"
 git push
 ```
 
@@ -15,7 +15,7 @@ v1.0.0〜1.0.2から移行する場合は、旧Updateを使用せず、新ZIPの
 ## 実機検証手順（Windows / macOS）
 
 1. Mayaの設定フォルダをMaya終了中に別の場所へコピーし、復旧できるようにする。既存の制作シーンは保存する。可能なら検証専用OSユーザーを使用する。
-2. 起動してFile等のメニュー、メニューセット、他シェルフを確認。新規環境でInstall + Shelfを選択する（Files Onlyによる段階テストも可能）。
+2. 起動してFile等のメニュー、メニューセット、他シェルフを確認。新規環境でinstall.pyを実行し、利用上の注意を確認する。未チェック時に両導入ボタンが無効、チェックで有効、チェック解除で無効、Cancel／閉じるで変更なしを確認する。同意後にInstall + Shelfを選択する（Files Onlyによる段階テストも可能）。
 3. 再起動せず5ツール、Separator、Help、Uninstall、Updateを確認し、各ツールの起動を試す。Files Onlyを選んだ場合は管理コードからRepair Shelfを選択する。
 4. Maya再起動後にシェルフが残ること、File等のメニューが表示されることを確認。
 5. v1.0.3〜1.0.7の5・6・7ボタン環境からUpdate → 再起動 → Updateを試す。SF → PH → CITY → MAT → RIG → Separator → Help → Uninstall → Updateの順、重複なし、元のツールとUpdateボタンの維持、再起動後の保持を確認。8ボタン＋Separator環境では通常更新でシェルフ保存が発生しないこと、カスタムボタンがある場合は自動同期しないことを確認。
@@ -35,14 +35,16 @@ v1.0.0〜1.0.2から移行する場合は、旧Updateを使用せず、新ZIPの
 
 - 1.0.8: City Builder v2.4.1（nTools起動・個別Help）とアイコン・日本語マニュアルを追加。既知の旧構成にCITYを追加し、MATの左へ移動。元の4ツールは削除・再作成しない。
 
+- 1.0.9: インストール確認をQtの同意ダイアログに変更。READMEの免責全文をオフライン表示し、未同意では本体導入・シェルフ登録を実行しない。通常Updateは変更なし。READMEの免責を改訂する際はinstall.pyのINSTALL_NOTICEも同期してrelease.pyを実行する。
+
 ## 次のリリース
 
 ツール本体を `scripts/ntools/tools/` 内の該当ファイルで上書きする。必要に応じ `release.py` のTOOLSリストでバージョン、説明等を修正する。アイコンは `scripts/ntools/icons/` に配置。配布に含めるファイルのハッシュを生成する：
 
 ```bash
-python release.py 1.0.8
+python release.py 1.0.9
 git add .
-git commit -m "Release nTools v1.0.8"
+git commit -m "Release nTools v1.0.9"
 git push
 ```
 

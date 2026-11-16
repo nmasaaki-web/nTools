@@ -25,7 +25,7 @@ SHELF = 'nTools'
 PACKAGE = 'ntools'
 MAX_BYTES = 32 * 1024 * 1024
 _RESTART_REQUIRED = False
-INSTALLER_VERSION = '1.0.8'
+INSTALLER_VERSION = '1.0.9'
 _SEPARATOR = '<ntools:shelf-separator>'
 _SHELF_SAVE_PENDING = False
 _UPDATE_BUSY = False
@@ -684,6 +684,75 @@ def _notify(message):
     cmds,_=_maya(); cmds.confirmDialog(title='nTools',message=message,button=['OK'])
 
 
+
+# Same disclaimer as the release README, embedded for offline installation.
+INSTALL_NOTICE = '1. 現状有姿での提供・無保証\n\nnTools（各ツール、インストーラー、更新・削除機能、サンプル、マニュアルを含み、以下「本ツール」）は、教育・制作支援を目的として現状有姿（AS IS）で無償提供されます。開発者および配布者は、本ツールの正確性、完全性、品質、安全性、特定目的への適合性、第三者の権利を侵害しないこと、継続的な動作、すべてのMaya・OS・プラグインとの互換性、エラーや不具合がないことを保証しません。\n\n2. 損害に関する免責\n\n本ツールの導入、利用、更新、変更、削除、利用不能、その他本ツールに関連する行為は、利用者自身の判断と責任で行ってください。\n\n開発者および配布者は、法令上責任を負う場合を除き、本ツールに起因または関連して生じた直接的・間接的・付随的・特別・結果的損害について責任を負いません。これには、重大なエラー、Mayaのクラッシュや起動不能、UI・設定の破損、シーン・制作データ・プロジェクトの破損や消失、作業の中断、復旧費用、納期の遅延、利益・機会の逸失、第三者との紛争などが含まれます。\n\nただし、この免責は開発者または配布者の故意もしくは重大な過失により生じた損害には適用されません。また、消費者契約法その他の適用法令により免責が認められない責任を免除・制限するものではありません。\n\n3. 違法・不正利用の禁止と利用者の責任\n\n本ツールを犯罪その他の法令違反、不正アクセス、詐欺、嫌がらせ、個人情報やプライバシーの侵害、著作権その他の第三者の権利の侵害等に利用することを禁止します。アクセス制限の回避、無許可のデータ取得、第三者サービスへの過度な負荷を生じさせる行為も禁止します。\n\n利用者は、自らの利用行為および取得・生成・加工・公開・配布するデータや成果物について、適用法令と利用条件を遵守する責任を負います。利用者による違法・不正な利用から生じる刑事上・民事上その他の責任は、法令に従い当該行為を行った者が負います。本ツールの提供は、違法行為を許可、推奨、援助するものではありません。本項は、開発者・配布者が法令上負う責任を免除するものではありません。\n\n4. バックアップと安全な利用\n\n- インストール・更新・アンインストール前に、Mayaの設定、シーン、プロジェクト、テクスチャなどを別の場所にバックアップしてください。重要な制作データは複製したシーンで動作を確認してください。\n- 重要な提出物、卒業制作、業務用プロジェクトなどに適用する前に、使用するOS・Maya・プラグインの環境で十分に検証してください。重大な損害を招く用途や人命・安全に関わる用途には使用しないでください。\n- 不具合や異常を確認した場合は直ちに利用を中止し、バックアップを保持したうえで、安全性と復旧 の手順を参照してください。\n- インストール・実行にあたっては、大学・所属組織の情報セキュリティ規則、ソフトウェア利用規則およびAutodesk製品の利用条件に従ってください。\n\n5. 外部サービス・素材・地図データ\n\n- Sketchfab、Poly Haven、Fab / Megascans、OpenStreetMap、Overpass、Project PLATEAU、国土地理院（GSI）等には、それぞれの利用規約、ライセンス、API利用条件が適用されます。本ツールの利用によって第三者の素材やデータの利用権が追加で付与されることはありません。\n- モデル・テクスチャ・HDRI・地図データ等を利用する際は、個別のライセンス、クレジット・出典表示、商用利用・改変・再配布の可否等を確認してください。取得した素材やデータの権利は、それぞれの権利者に帰属します。\n- City Builderの建物高、地形、道路、街路設備等には推定・簡略化された情報が含まれます。測量、設計上の安全判断、ナビゲーション等の正確性が必要な用途には使用しないでください。\n- 外部サービスの停止、仕様変更、通信制限、料金、データの正確性等について、本ツールは保証しません。ネットワーク通信や外部サービスへのアクセスに伴う利用条件の遵守は利用者の責任です。\n\n6. セキュリティと個人情報\n\n- 本ツールはPythonコードをMaya上で実行し、機能に応じてローカルファイルの読み書きや外部サービスとの通信を行います。信頼できる配布元から取得し、内容を確認してから使用してください。\n- SketchfabなどのAPIトークン、パスワード、個人情報、大学・企業の機密情報をGitHubの公開リポジトリやIssue、ログ、スクリーンショット等に投稿しないでください。\n- 地図機能では選択した地域の座標等が外部サービスに送信されることがあります。各サービスのプライバシーポリシーを確認し、公開・送信に適さない情報を扱わないでください。\n\n7. サポート・公式性\n\n本ツールは授業・制作支援のための独立したツールセットであり、Autodeskや各外部サービスの公式製品・公式サポートではありません。継続的な開発、更新、修正、個別サポート、データ復旧を保証するものではありません。配布や機能の提供を変更・終了する場合があります。'
+
+
+def _install_consent(message):
+    """Fail closed: only a checked, explicit button press permits installation."""
+    try:
+        from PySide6 import QtWidgets
+        from shiboken6 import wrapInstance
+    except ImportError:
+        from PySide2 import QtWidgets
+        from shiboken2 import wrapInstance
+    import maya.OpenMayaUI as omui
+    ptr = omui.MQtUtil.mainWindow()
+    parent = wrapInstance(int(ptr), QtWidgets.QWidget) if ptr else None
+    dialog = QtWidgets.QDialog(parent)
+    dialog.setWindowTitle('nTools — インストール・利用上の注意')
+    dialog.resize(730, 650)
+    layout = QtWidgets.QVBoxLayout(dialog)
+    layout.setContentsMargins(18, 18, 18, 18)
+    layout.setSpacing(10)
+    heading = QtWidgets.QLabel('インストール前に必ずお読みください')
+    font = heading.font(); font.setBold(True); heading.setFont(font)
+    layout.addWidget(heading)
+    intro = QtWidgets.QLabel(message)
+    intro.setWordWrap(True); layout.addWidget(intro)
+    notice = QtWidgets.QPlainTextEdit(dialog)
+    notice.setReadOnly(True)
+    notice.setPlainText(INSTALL_NOTICE)
+    notice.setMinimumHeight(180)
+    layout.addWidget(notice, 1)
+    link = QtWidgets.QPushButton('GitHubで免責事項・利用上の注意を読む')
+    link.setAutoDefault(False)
+    link.clicked.connect(lambda *_: webbrowser.open(REPO + '#免責事項利用上の注意'))
+    layout.addWidget(link)
+    check = QtWidgets.QCheckBox('利用上の注意を確認し、内容に同意します。')
+    check.setChecked(False)
+    layout.addWidget(check)
+    hint = QtWidgets.QLabel('同意するとインストールボタンが有効になります。作業データとMayaの設定をバックアップしてください。')
+    hint.setWordWrap(True); layout.addWidget(hint)
+    row = QtWidgets.QHBoxLayout(); layout.addLayout(row)
+    row.addStretch(1)
+    full = QtWidgets.QPushButton('Install + Shelf')
+    files = QtWidgets.QPushButton('Files Only')
+    cancel = QtWidgets.QPushButton('Cancel')
+    choice = ['Cancel']
+    for button in (full, files, cancel):
+        button.setAutoDefault(False)
+        row.addWidget(button)
+    full.setEnabled(False); files.setEnabled(False)
+    cancel.setDefault(True)
+    def toggle(checked):
+        full.setEnabled(bool(checked)); files.setEnabled(bool(checked))
+    check.toggled.connect(toggle)
+    def accept(which):
+        # Check again at execution, not merely via disabled buttons.
+        if not check.isChecked(): return
+        choice[0] = which
+        dialog.accept()
+    full.clicked.connect(lambda *_: accept('Install + Shelf'))
+    files.clicked.connect(lambda *_: accept('Files Only'))
+    cancel.clicked.connect(dialog.reject)
+    result = dialog.exec() if hasattr(dialog, 'exec') else dialog.exec_()
+    accepted = getattr(QtWidgets.QDialog, 'Accepted', None)
+    if accepted is None: accepted = QtWidgets.QDialog.DialogCode.Accepted
+    return choice[0] if result == accepted and check.isChecked() else 'Cancel'
+
+
 def install(source=None):
     """Install local release; create shelf only if absent and safe."""
     try:
@@ -702,7 +771,7 @@ def install(source=None):
         if old and _version(m['version'])<_version(old['version']): raise RuntimeError('旧版はインストールできません。')
         msg='nTools '+m['version']+' を導入します。\n既存のシェルフは削除・再構築しません。\nInstall + Shelfでは不足するCity Builder・管理ボタン・Separatorのみ追加します。'
         if old is None: msg+='\n初回導入は再起動不要です。'
-        choice=cmds.confirmDialog(title='nTools',message=msg,button=['Install + Shelf','Files Only','Cancel'],defaultButton='Install + Shelf',cancelButton='Cancel',dismissString='Cancel')
+        choice=_install_consent(msg)
         if choice not in ('Install + Shelf','Files Only'):return
         restart=_apply(m,payload)
         if not exists and choice=='Install + Shelf':
