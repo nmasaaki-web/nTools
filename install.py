@@ -24,6 +24,7 @@ SHELF = 'nTools'
 PACKAGE = 'ntools'
 MAX_BYTES = 32 * 1024 * 1024
 _RESTART_REQUIRED = False
+INSTALLER_VERSION = '1.0.1'
 
 
 def _maya():
@@ -182,26 +183,130 @@ def _command(action):
             'from ntools import installer as nt\n'+action)
 
 
-def register_shelf(manifest=None):
-    cmds,mel = _maya()
-    m = manifest or _installed()
-    if m is None: raise RuntimeError('nTools is not installed.')
+def _ui_snapshot():
+    """Read-only guard: never modify menu sets or the workspace."""
+    cmds, _ = _maya()
+    sets = tuple(sorted(cmds.menuSet(q=True, allMenuSets=True) or []))
+    current = cmds.menuSet(q=True, currentMenuSet=True)
+    if not sets or not current or current not in sets:
+        raise RuntimeError('Mayaのメニューセットが正常ではありません。UIを復旧してから実行してください。')
     top = _shelf_parent()
-    shelf = top+'|'+SHELF
-    if not cmds.shelfLayout(shelf,exists=True):
+    if not top or not cmds.shelfTabLayout(top, exists=True):
+        raise RuntimeError('Mayaのシェルフが利用できません。UIを復旧してください。')
+    return (sets, current, tuple(cmds.menuSet(q=True, menuArray=True) or []))
+
+
+def _shelf():
+    return _shelf_parent()+'|'+SHELF
+
+
+def _backup_ui():
+    # Read/copy only. Never save/reset global prefs, change Maya.env or userSetup.
+    cmds, _ = _maya()
+    folder = _target().parent / '.ntools-ui-backups' / uuid.uuid4().hex
+    folder.mkdir(parents=True)
+    prefs = Path(cmds.internalVar(userPrefDir=True))
+    for name in ('userPrefs.mel', 'menuSetPrefs.mel', 'windowPrefs.mel', 'userHotkeys.mel'):
+        src = prefs/name
+        if src.is_file(): shutil.copy2(src, folder/name)
+    path = _shelf_path()
+    if path.is_file(): shutil.copy2(path, folder/path.name)
+    print('nTools UI backup:', folder)
+    return folder
+
+
+def _owned_shelf():
+    # Never delete a user's custom shelf merely because its name is nTools.
+    cmds, _ = _maya(); shelf = _shelf()
+    if not cmds.shelfLayout(shelf, exists=True): return False
+    children = cmds.shelfLayout(shelf, q=True, childArray=True) or []
+    if not children: return False
+    for child in children:
+        full = child if child.startswith(shelf+'|') else shelf+'|'+child.split('|')[-1]
+        if not cmds.shelfButton(full, exists=True): return False
+        command = cmds.shelfButton(full, q=True, command=True) or ''
+        if 'from ntools import installer as nt' not in command: return False
+        if not re.search(r"nt\.(?:launch\(|update\(|manage\()", command): return False
+    return True
+
+
+def _layout_signature(m):
+    return [(t['id'],t['label'],t['short'],t['icon'],t['description']) for t in m['tools']]
+
+
+def register_shelf(manifest=None):
+    """Create ONLY a missing shelf. Never delete/rebuild an existing tab."""
+    cmds,mel = _maya(); m = manifest or _installed()
+    if m is None: raise RuntimeError('nTools is not installed.')
+    before = _ui_snapshot(); top = _shelf_parent(); shelf = top+'|'+SHELF
+    if cmds.shelfLayout(shelf,exists=True):
+        raise RuntimeError('nToolsシェルフが既にあります。既存のタブは変更しません。')
+    if _shelf_path().exists():
+        raise RuntimeError('既存の shelf_nTools.mel があります。Mayaを再起動して確認してください。')
+    _backup_ui()
+    parent = cmds.setParent(q=True)
+    try:
         mel.eval('addNewShelfTab "nTools";')
-    if not cmds.shelfLayout(shelf,exists=True):
-        raise RuntimeError('Cannot create nTools shelf.')
-    for child in cmds.shelfLayout(shelf,q=True,childArray=True) or []:
-        full = child if '|' in child else shelf+'|'+child
-        cmds.deleteUI(full)
-    for t in m['tools']:
-        cmds.shelfButton(parent=shelf,label=t['label'],annotation=t['label']+' v'+t['version']+' | '+t['description'],image1=(_target()/'icons'/t['icon']).as_posix(),imageOverlayLabel=t['short'],sourceType='python',command=_command('nt.launch('+repr(t['id'])+')'))
-    cmds.shelfButton(parent=shelf,label='Update nTools',annotation='nTools '+m['version']+' | Check GitHub for updates',image1=(_target()/'icons'/'update.png').as_posix(),imageOverlayLabel='Update',sourceType='python',command=_command('nt.update()'))
-    path=_shelf_path(); path.parent.mkdir(parents=True,exist_ok=True)
-    if not cmds.saveShelf(shelf,path.as_posix()): raise RuntimeError('Could not save nTools shelf.')
-    cmds.shelfTabLayout(top,e=True,selectTab=SHELF)
+        if not cmds.shelfLayout(shelf,exists=True): raise RuntimeError('Cannot create nTools shelf.')
+        for t in m['tools']:
+            cmds.shelfButton(parent=shelf,label=t['label'],annotation=t['label']+' | '+t['description'],image1=(_target()/'icons'/t['icon']).as_posix(),imageOverlayLabel=t['short'],sourceType='python',command=_command('nt.launch('+repr(t['id'])+')'))
+        cmds.shelfButton(parent=shelf,label='Update nTools',annotation='Check GitHub for updates',image1=(_target()/'icons'/'update.png').as_posix(),imageOverlayLabel='Update',sourceType='python',command=_command('nt.update()'))
+        if _ui_snapshot()!=before: raise RuntimeError('Mayaのメニュー状態が変化しました。作業を中止しました。')
+        # Save only this shelf, not all Maya preferences.
+        path=_shelf_path(); path.parent.mkdir(parents=True,exist_ok=True)
+        if not cmds.saveShelf(SHELF,path.as_posix()): raise RuntimeError('Could not save nTools shelf.')
+        if _ui_snapshot()!=before: raise RuntimeError('Mayaのメニュー状態が変化しました。バックアップを確認してください。')
+    finally:
+        # Do not try to delete a partially created shelf in an error handler.
+        # The user can remove it using Maya's own shelf editor after inspection.
+        if parent:
+            try: cmds.setParent(parent)
+            except RuntimeError: pass
     return shelf
+
+
+def repair_shelf():
+    """Rebuild only a missing tab; never automatically remove a live tab."""
+    try:
+        _ui_snapshot(); m=_installed()
+        if m is None: raise RuntimeError('先に install.py で本体を導入してください。')
+        cmds,_=_maya()
+        if cmds.shelfLayout(_shelf(),exists=True):
+            _notify('既存の nTools シェルフは変更していません。\n再作成する場合は、MayaのShelf Editorで nTools タブだけを削除し、再起動後に Repair Shelf を実行してください。');return
+        if not _confirm('nToolsシェルフを新規登録します。既存のシェルフやメニュー設定は変更しません。','Repair'): return
+        register_shelf(m)
+        _notify('nToolsシェルフを登録しました。Mayaを再起動して確認してください。')
+    except Exception as exc:
+        traceback.print_exc(); _notify('シェルフ登録失敗：\n'+str(exc)+'\n本体は保持しています。MayaのUIを確認してください。')
+
+
+def uninstall():
+    """Conservative uninstall: Maya handles its own shelf deletion; archive package."""
+    try:
+        _ui_snapshot(); cmds,mel=_maya(); dest=_target()
+        if _installed() is None: raise RuntimeError('認識できるnTools本体がありません。変更しません。')
+        if not _confirm('nToolsを削除します。シーン・他のシェルフは変更しません。\n本体はバックアップに移動します。','Uninstall'):return
+        if cmds.shelfLayout(_shelf(),exists=True):
+            if not _owned_shelf(): raise RuntimeError('nToolsシェルフに未確認のボタンがあります。Shelf Editorで手動削除してください。')
+            _backup_ui(); before=_ui_snapshot()
+            mel.eval('deleteShelfTab "nTools";')
+            if cmds.shelfLayout(_shelf(),exists=True): return  # cancelled
+            if _ui_snapshot()!=before: raise RuntimeError('メニュー状態が変化しました。本体を保持します。')
+        if _shelf_path().exists():
+            raise RuntimeError('シェルフファイルが残っています。Mayaで削除を保存し、再起動後に再実行してください。')
+        backup=dest.parent/('.ntools-uninstalled-'+uuid.uuid4().hex)
+        dest.rename(backup); sys._ntools_restart_required=True
+        _notify('nToolsをアンインストールしました。Mayaを再起動してください。\nバックアップ：'+str(backup))
+    except Exception as exc:
+        traceback.print_exc(); _notify('アンインストール中止：\n'+str(exc))
+
+
+def manage():
+    cmds,_=_maya()
+    choice=cmds.confirmDialog(title='nTools Manager',message='nToolsの管理操作を選んでください。',button=['Update','Repair Shelf','Uninstall','Cancel'],defaultButton='Cancel',cancelButton='Cancel',dismissString='Cancel')
+    if choice=='Update': update()
+    elif choice=='Repair Shelf': repair_shelf()
+    elif choice=='Uninstall': uninstall()
 
 
 def launch(ident):
@@ -223,47 +328,29 @@ def launch(ident):
 
 
 def _apply(m,payload):
+    """File transaction only. Never access or mutate Maya UI here."""
     dest=_target(); dest.parent.mkdir(parents=True,exist_ok=True)
     old=_installed()
-    if dest.exists() and old is None:
+    if dest.is_symlink() or (dest.exists() and old is None):
         raise RuntimeError('Existing unrecognized ntools folder. No files changed: '+str(dest))
-    # Stage complete package before any existing installation is changed.
     stage=Path(tempfile.mkdtemp(prefix='.ntools-stage-',dir=str(dest.parent)))
     backup=dest.parent/('.ntools-backup-'+uuid.uuid4().hex)
-    shelf_file=_shelf_path()
-    saved_shelf=shelf_file.read_bytes() if shelf_file.is_file() else None
     moved=False; installed=False
     try:
         for relative,data in payload.items():
             p=stage/relative; p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(data)
         if dest.exists(): dest.rename(backup); moved=True
-        stage.rename(dest);installed=True
+        stage.rename(dest); installed=True
         importlib.invalidate_caches()
-        register_shelf(m)
     except Exception:
         if installed: shutil.rmtree(dest)
         if moved: backup.rename(dest)
-        # Restore saved shelf on disk, and recreate previous managed UI when possible.
-        try:
-            if old: register_shelf(old)
-            else:
-                cmds,_=_maya(); shelf=_shelf_parent()+'|'+SHELF
-                if cmds.shelfLayout(shelf,exists=True): cmds.deleteUI(shelf)
-        except Exception: traceback.print_exc()
-        # Restore the disk shelf even if rebuilding the live UI failed.
-        try:
-            if saved_shelf is not None: shelf_file.write_bytes(saved_shelf)
-            elif shelf_file.exists(): shelf_file.unlink()
-        except Exception: traceback.print_exc()
         raise
     finally:
         if stage.exists(): shutil.rmtree(stage,ignore_errors=True)
-    # Keep one successful previous installation, outside the importable package.
-    if moved:
-        for p in dest.parent.glob('.ntools-backup-*'):
-            if p!=backup and p.is_dir(): shutil.rmtree(p,ignore_errors=True)
-    if old is not None:
-        sys._ntools_restart_required=True
+    # Keep all backups; never prune directories that could contain user data.
+    if moved: print('nTools previous package:', backup)
+    if old is not None: sys._ntools_restart_required=True
     return old is not None
 
 
@@ -277,42 +364,49 @@ def _notify(message):
 
 
 def install(source=None):
-    """Install from extracted repository; otherwise download from GitHub."""
+    """Install local release; create shelf only if absent and safe."""
     try:
-        # Explicit source path provided by drag/drop or Python Script Editor.
-        # Pasting the whole file into Script Editor also works (online fallback).
+        _ui_snapshot()
         path=Path(source).resolve() if source else None
         if path and path.is_file(): path=path.parent
         if path is None:
-            file=globals().get('__file__')
-            path=Path(file).resolve().parent if file else None
+            file=globals().get('__file__'); path=Path(file).resolve().parent if file else None
         local=path is not None and (path/'version.json').is_file() and (path/'scripts'/'ntools').is_dir()
         m,payload=_local(path) if local else _online()
-        old=_installed()
-        cmds,_=_maya(); shelf=_shelf_parent()+'|'+SHELF
-        if old is None and cmds.shelfLayout(shelf,exists=True):
-            raise RuntimeError('Existing nTools shelf without an installation. Rename that shelf first; no changes made.')
-        if old and _version(m['version'])<_version(old['version']):
-            raise RuntimeError('Older package. Use the latest version instead.')
-        msg='nTools '+m['version']+' をインストールします。\nツールと更新ボタンを登録します。\n既存の nTools シェルフは置き換わります。\n他のシェルフ・制作データは変更しません。'
-        if not _confirm(msg):return
+        if _version(m['version'])<_version(INSTALLER_VERSION): raise RuntimeError('旧版はインストールできません。')
+        old=_installed(); cmds,_=_maya(); exists=cmds.shelfLayout(_shelf(),exists=True)
+        if old is None and exists: raise RuntimeError('同名の既存シェルフがあります。変更しません。')
+        if old and _version(m['version'])<_version(old['version']): raise RuntimeError('旧版はインストールできません。')
+        msg='nTools '+m['version']+' を導入します。\n既存のシェルフ・メニュー設定は変更しません。\nシェルフがない場合のみ新規登録します。'
+        choice=cmds.confirmDialog(title='nTools',message=msg,button=['Install + Shelf','Files Only','Cancel'],defaultButton='Files Only',cancelButton='Cancel',dismissString='Cancel')
+        if choice not in ('Install + Shelf','Files Only'):return
         restart=_apply(m,payload)
-        _notify('インストール完了！ nTools '+m['version']+'\n'+('Mayaを再起動してください。' if restart else 'nTools シェルフを選んでください。'))
+        if not exists and choice=='Install + Shelf':
+            try: register_shelf(m)
+            except Exception as exc:
+                traceback.print_exc(); _notify('本体の導入は完了しましたが、シェルフ登録を中止しました。\n'+str(exc)+'\nMayaのUIを確認後、Repair Shelfを実行してください。');return
+        note='Mayaを再起動してください。' if restart else 'nTools シェルフを選んでください。'
+        if not exists and choice=='Files Only': note='本体のみ導入しました。Mayaを再起動してUIを確認後、Repair Shelfを実行してください。'
+        if old and _layout_signature(old)!=_layout_signature(m): note+='\nボタン構成が変わりました。必要に応じてRepair Shelfを実行してください。'
+        _notify('インストール完了！ nTools '+m['version']+'\n'+note)
     except Exception as exc:
         traceback.print_exc();_notify('インストール失敗：\n'+str(exc)+'\n詳細は Script Editor を確認してください。')
 
 
 def update():
-    """Check public GitHub main, confirm, then replace only nTools."""
+    """File-only update; shelf changes require separate explicit repair."""
     try:
+        if getattr(sys,'_ntools_restart_required',False):
+            _notify('先にMayaを再起動してください。');return
         old=_installed()
         if old is None: raise RuntimeError('nTools is not installed. Run install.py again.')
         m,payload=_online()
         if _version(m['version'])<=_version(old['version']):
             _notify('現在の nTools '+old['version']+' は最新版です。\nGitHub: '+m['version']);return
-        if not _confirm('nTools '+old['version']+' → '+m['version']+'\n更新しますか？\nシーンを保存し、ツールの作業を終えてから更新してください。\n更新後は Maya の再起動が必要です。','Update'):return
+        changed=_layout_signature(old)!=_layout_signature(m)
+        if not _confirm('nTools '+old['version']+' → '+m['version']+'\n本体のみ更新します。シェルフは変更しません。\nシーンを保存し、ツールの作業を終えてください。\n更新後は Maya の再起動が必要です。','Update'):return
         _apply(m,payload)
-        _notify('更新完了：nTools '+m['version']+'\nMayaを再起動してください。')
+        _notify('更新完了：nTools '+m['version']+'\nMayaを再起動してください。'+('\nボタン構成が変わりました。必要に応じてRepair Shelfを実行してください。' if changed else ''))
     except Exception as exc:
         traceback.print_exc();_notify('更新失敗：\n'+str(exc)+'\n詳細は Script Editor を確認してください。')
 

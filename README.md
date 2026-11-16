@@ -1,28 +1,24 @@
-# nTools — Maya Tools for CG Classes
+# nTools v1.0.1
 
-Maya 2027 を主な対象とする、3DCG演習用ツール集です。Windows / macOS のユーザー環境に nTools シェルフを登録し、4つのツールをまとめて起動・更新できます。
+Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
-![nTools icons](docs/shelf_preview.png)
+![nTools shelf preview](docs/shelf_preview.png)
 
-## 収録ツール
+| ツール | バージョン | 機能 |
+|---|---|---|
+| Sketchfab Asset Browser | 1.2 | 静的glTFモデルの検索・インポート、OpenPBR |
+| PolyHaven Asset Browser | 5.2 | モデル・テクスチャ・HDRI、ローカルライブラリ |
+| Material Creator | 1.3 | ローカルテクスチャ / JSONからOpenPBR作成 |
+| Quadruped Quick Rig | 2.4.0 | 四足ガイド、IK/FK、試験的なリターゲット |
 
-| アイコン | ツール | バージョン | 概要 |
-|---|---|---|---|
-| ![SF](scripts/ntools/icons/sketchfab.png) | Sketchfab Asset Browser | 1.2 | Sketchfabの検索・サムネイル表示・静的glTFのインポート、OpenPBR |
-| ![PH](scripts/ntools/icons/polyhaven.png) | PolyHaven Asset Browser | 5.2 | Poly Havenアセット、HDRI、ローカルライブラリ、OpenPBR |
-| ![MAT](scripts/ntools/icons/material.png) | Material Creator | 1.3 | ローカルテクスチャ／JSONからOpenPBRマテリアル作成・アサイン |
-| ![RIG](scripts/ntools/icons/quadruped.png) | Quadruped Quick Rig | 2.4.0 | 馬・犬・狼・猫のガイド、IK/FKリグ、試験的なモーション転送 |
-| ![Update](scripts/ntools/icons/update.png) | Update | — | GitHub mainのパッケージ更新確認・導入 |
+## 初回導入（学生）
 
-## 学生向け：最初のインストール（Windows / macOS）
+1. [GitHub](https://github.com/nmasaaki-web/nTools) の Code → Download ZIP を選択し、展開する。
+2. Mayaを起動し、Fileメニュー・メニューセット・シェルフが正常に表示されていることを確認。作業中のシーンを保存する。
+3. 展開した `install.py` をMayaのビューポートへドラッグ＆ドロップ。確認画面で **Install + Shelf** を選ぶと、未登録の場合に限りnToolsシェルフを作成する。**Files Only** は本体だけを導入する（安全確認用、初期選択）。
+4. Mayaを再起動。nToolsタブの4ツールと右端Updateを確認する。
 
-1. [nToolsをZIPでダウンロード](https://github.com/nmasaaki-web/nTools/archive/refs/heads/main.zip)（またはこのページの Code → Download ZIP）。
-2. ZIPを展開する。ZIPの中から直接実行しないこと。
-3. Maya 2027を起動し、展開したフォルダの `install.py` をMayaのビューポートへドラッグ＆ドロップする。
-4. 確認ダイアログで **Install** を選択する。
-5. シェルフに **nTools** タブが追加される。SF、PH、MAT、RIG、Updateの順に並ぶ。
-
-ドラッグ＆ドロップで動かない場合は、Mayaの Script Editor を開き、**Python** タブに次のコードを貼って実行する。ファイル選択で展開済み `install.py` を指定する。
+ドラッグできない場合はScript Editorの **Python** タブで実行し、展開した `install.py` を選択：
 
 ```python
 import maya.cmds as cmds
@@ -32,33 +28,44 @@ if p:
     runpy.run_path(p[0], run_name='__main__')
 ```
 
-- インストールはMayaのユーザースクリプトディレクトリに行う。管理者権限、Git、pipは不要。
-- 他のシェルフ、シーン、プロジェクトフォルダは変更しない。nToolsタブのみ管理対象とする。
-- 初回導入後はシェルフを保存するため、Mayaを起動し直しても利用できる設計。
-- 大学のPCでユーザープロファイルが初期化される場合は、再インストールが必要。
+## 旧版 v1.0.0 からの移行（重要）
 
-## 学生向け：アップデート
+旧版のUpdateはシェルフを再登録するため、**旧版のUpdateを押さず**、v1.0.1のZIPをダウンロードして上記のインストールを行う。まずFiles Onlyを選択し、Mayaを再起動してUIが正常か確認することを推奨。既存のnToolsシェルフは変更しない。タブがない場合は次のRepair Shelfを実行する。
 
-1. シーンを保存して、ツールの処理を終了する。
-2. nToolsシェルフの一番右にある **Update** をクリックする。
-3. GitHubに新しいパッケージバージョンがあれば確認画面で **Update** を選択する。
-4. 更新完了後、Mayaを再起動する。
+## 管理・修復・アンインストール
 
-最新版ならその旨を表示する。通信や検証が失敗した場合は、既存のツールを維持する。更新はインストール済みnToolsのみ対象。自動的にバックグラウンド更新は行わない。
+Maya Script EditorのPythonタブで実行：
 
-## 使用上の注意
+```python
+import sys
+import maya.cmds as cmds
+p = cmds.internalVar(userScriptDir=True)
+if p not in sys.path:
+    sys.path.insert(0, p)
+from ntools import installer as nt
+nt.manage()
+```
 
-- Maya 2027を推奨。OpenPBRとArnold/MtoAを使用する機能がある。必要に応じてFBX/OBJプラグインも使用する。
-- Sketchfabのダウンロードには自分のAPIトークンが必要。トークンを公開リポジトリ、課題提出物、他人と共有しない。各アセットのライセンス・作者表記に従う。静的glTFのみ対象で、一部拡張、圧縮、リグ、アニメーションは非対応。
-- PolyHaven/Material Creatorでは、テクスチャをプロジェクトへコピーする場合、事前に File → Set Project を実行する。
-- Quadruped Quick RigはMotionMaker/HumanIKの正式なキャラクター定義ではない。転送は試験的な機能で、足の接地や解剖学的な一致を保証しない。コピーしたシーンで試すこと。
-- 個別ツールは提供されたオリジナルのスクリプトをそのまま収録。Maya 2027上の統合インストール・更新処理は実機での確認が必要。
-- macOSのアップデート通信ではシステムcurlを利用し、SSL証明書の検証を無効化しない。
+- **Update**：GitHub mainの新しいバージョンを確認し、本体だけ更新。既存シェルフは一切変更しない。更新後は再起動。
+- **Repair Shelf**：シェルフが存在しないときにだけ登録。既存タブは変更しない。既存のタブを作り直したい場合はMaya標準のShelf EditorでnToolsのみを削除・保存し、再起動してからRepair Shelf。既存のシェルフファイルが残っている場合は安全のため中止する。
+- **Uninstall**：既存nToolsシェルフが管理対象のボタンのみで構成されていることを確認し、Maya公式の削除確認を表示。削除が確認できた場合のみ本体をバックアップに移動する。他のボタンが混在する場合やMELファイルが残る場合は中止。Mayaを再起動する。
 
-## 教員向け：更新方法
+Updateボタンはこれまでどおり直接更新を行う。管理メニューは上記コードで開く。ファイルのみ導入した場合にも使える。
 
-[管理・公開手順](docs/maintainer.md)を参照してください。
+## 利用時の注意
 
-## 配布について
+- File → Set Project を行ってからアセットやマテリアルを読み込む。
+- SketchfabのAPIトークンは各自取得し、公開リポジトリに保存しない。モデルごとのライセンス・作者表示を確認。アニメーションやスキンは未対応。
+- Poly Haven・Material CreatorはArnold / OpenPBRが必要。アセットの種類によってFBX等のプラグインが必要。
+- 四足リグはMotionMaker/HumanIK認定リグではない。転送は試験的機能。必ずシーンのコピーで試す。
+- Updateはインターネット接続が必要。学内プロキシ等で失敗した場合は新ZIPから手動導入する。
 
-本リポジトリは授業用ツールの配布を目的とします。個別のアセットは同梱していません。Sketchfab、Poly HavenおよびAutodeskは各権利者に帰属します。第三者の公式製品ではありません。公開リポジトリの閲覧可否とコードの再利用・再配布の許諾は別です。ライセンスは管理者が確定のうえ追加してください。
+## 安全性と復旧
+
+v1.0.1は通常更新でシェルフを再構築せず、Maya.env、userSetup、メニューセット、ワークスペース、他のシェルフを直接編集しない。シェルフ登録・削除の直前にメニュー状態を確認し、関連する設定ファイル（存在するもの）をコピーして保存する。Mayaの標準処理による設定変更はあり得る。
+
+本体はMayaのユーザースクリプトディレクトリ内の `ntools` に保存。バックアップは同じ親フォルダ内の `.ntools-backup-*`、`.ntools-uninstalled-*`、`.ntools-ui-backups`。バックアップを自動で削除しない。シェルフ登録失敗時は本体を保持し、UIを自動削除・全設定復元しない。
+
+UIがおかしくなった場合は操作を中止し、Mayaの再起動・標準のメニューセット復元を試す。設定をリセットする場合は、Mayaを終了してから設定フォルダを削除ではなく名前変更してバックアップする。詳しくは [管理者向けガイド](docs/maintainer.md)。
+
+公開コードを信頼できることを確認してからインストールしてください。SHA-256は配布内の整合性検証であり、署名による作者認証ではありません。

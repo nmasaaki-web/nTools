@@ -1,58 +1,53 @@
-# 教員向け：nToolsの公開・管理
+# nTools 管理者向けガイド v1.0.1
 
-## 初回公開
+## 公開・移行
 
-このZIPを解凍し、`nTools_repository` フォルダの**中身**を、既存のローカルGitリポジトリ（例：`~/Documents/git/nTools`）へコピーする。既存の `.git` フォルダは削除しない。`README.md` が既にある場合は今回の版で置き換える。
-
-Git Bashをそのリポジトリで開き、次を実行する。
+ZIPの中身を既存のGit作業フォルダに上書きコピーする。`.git` は維持する。`git status` を確認し、以下を実行する。
 
 ```bash
-git status
-git remote -v
-git add README.md install.py release.py version.json .gitignore .gitattributes scripts docs
-git commit -m "Add nTools Maya shelf and four tools"
-git push -u origin main
-```
-
-originが `https://github.com/nmasaaki-web/nTools.git` であることを確認する。未設定の場合のみ `git remote add origin https://github.com/nmasaaki-web/nTools.git`。Gitの初回設定がまだなら `git config --global user.name "nmasaaki-web"` と `git config --global user.email "自分のGitHubメールアドレスまたはnoreply"` を実行する。
-
-公開後、GitHubのREADMEが表示され、Code → Download ZIPで全ファイルを入手できることを確認する。学生にはリポジトリURLを案内する。
-
-## 更新の流れ
-
-1. `scripts/ntools/tools/` の該当Pythonファイルを最新版に置き換える。ファイル名は固定する。
-2. `release.py` の `TOOLS` 内で該当ツールの `version` を更新する。起動関数が変わった場合は `entry`、importで自動起動するか変わった場合は `opens_on_import` も調整する。
-3. ルートの `README.md` のバージョン表も更新する。
-4. リポジトリルートで通常のPython 3を使用し、`python release.py 1.0.1` を実行する（Windowsで必要なら `py -3 release.py 1.0.1`、macOSなら `python3 release.py 1.0.1`）。リリース番号は必ず前回より大きくする。
-5. `version.json` に全配布ファイルのSHA-256が生成される。内容を確認したうえでまとめてコミット・pushする。
-
-```bash
-git add scripts install.py release.py version.json README.md docs
-git commit -m "Release nTools 1.0.1"
+git add .
+git commit -m "Release nTools v1.0.1 - safer installer"
 git push
 ```
 
-学生側はUpdateボタンだけで更新できる。ZIPを再配布する必要はない。`version.json` を更新しないままスクリプトだけ変更すると検証が失敗するので、必ずrelease.pyを実行する。
+旧v1.0.0ユーザーは古いUpdateボタンを使用せず、新ZIPのinstall.pyから手動移行。既存シェルフを保持する。v1.0.1以降は通常Updateを利用できる。
 
-## シェルフ構成
+## 実機検証手順（Windows / macOS）
 
-`release.py` の `TOOLS` の並び順がシェルフの順番になる。追加・削除・並び替えの後は必ずリリース番号を上げて `release.py` を実行する。Updateは自動的に最後に付く。アイコンは64×64 PNG。初回導入時に自動登録されるため手動でMELシェルフを配布する必要はない。
+1. Mayaの設定フォルダをMaya終了中に別の場所へコピーし、復旧できるようにする。既存の制作シーンは保存する。可能なら検証専用OSユーザーを使用する。
+2. 起動してFile等のメニュー、メニューセット、他シェルフを確認。Files Onlyで導入する。
+3. Maya再起動後、UIが正常ならREADMEの管理コードからRepair Shelfを選択する。4ツールとUpdateを確認し、各ツールの起動を試す。
+4. Maya再起動後にシェルフが残ること、File等のメニューが表示されることを確認。
+5. Updateボタンで最新版判定を確認。次のテスト版を公開して更新するとき、既存シェルフのボタン数・順序、メニューが変化しないことを確認。
+6. 検証用環境でUninstallを試し、Mayaの削除確認、再起動後のnTools消失、他タブとメニューの維持を確認。キャンセル時に本体が残ることも確認。
 
-## 動作確認チェックリスト（配布前）
+## 変更履歴と設計
 
-- WindowsのMaya 2027で新規ユーザー環境にインストール、5ボタン、ツール起動、再起動後の残存を確認。
-- macOSのMaya 2027でも同様に確認。PolyHavenとSketchfabのネットワーク通信を確認。
-- GitHub mainに新バージョンを公開し、旧版インストール済み環境でUpdate → 確認 → 再起動を確認。
-- 他のシェルフ、シーン、プロジェクトデータが変更されていないことを確認。
-- 失敗テスト：ネットワーク切断、壊れたハッシュ、同一バージョン、既存nTools名のシェルフ。エラー表示と旧版維持を確認。
-- QQRでリグ生成・IK/FK・転送をコピーしたシーンで確認。特に旧版の制約を継承する。
+- 1.0.0: 初回配布。通常更新でもシェルフを再構築。
+- 1.0.1: パッケージ置換をシェルフ操作から分離。既存タブは再構築しない。修復は欠落タブに限定。Maya公式addNewShelfTab / deleteShelfTabを使用し、独自deleteUIでタブを削除しない。メニューセットを読み取り確認し、関連設定をバックアップ。全体設定の自動リセットなし。
+- 元の4ツールおよびアイコンは変更なし。
 
-## 技術メモ
+## 次のリリース
 
-- `install.py` を展開したリポジトリから実行する場合はローカルファイルを使用。単体で実行した場合は公開GitHub mainのZIPを取得する。
-- `scripts/ntools` の内容とインストーラー自身を `cmds.internalVar(userScriptDir=True)/ntools` に導入する。
-- シェルフは `cmds.internalVar(userShelfDir=True)/shelf_nTools.mel` に保存する。コマンドはクリック時に環境別のスクリプトパスを解決する。
-- 更新は同一GitHubアーカイブのマニフェストと照合し、SHA-256およびPython構文を検証してから既存フォルダを置換する。ハッシュは転送・構成ミスの検出用で、署名ではない。GitHubの管理者アカウントとmainへの書き込み権限を保護すること。
-- 更新直後は旧Pythonモジュールがメモリに残る可能性があるので再起動が必要。直前のパッケージは `.ntools-backup-*` に1世代保存する。手動復元時はMayaを終了してから実施する。
-- 既存nToolsシェルフに学生が追加した個人ボタンは更新で消える。個人用ボタンは別のシェルフへ移動すること。未管理のnToolsシェルフと衝突した場合は初回導入を中止する。
-- 問題がある場合はScript EditorのログとOS、Mayaのバージョンを教員へ知らせる。
+ツール本体を `scripts/ntools/tools/` 内の該当ファイルで上書きする。必要に応じ `release.py` のTOOLSリストでバージョン、説明等を修正する。アイコンは `scripts/ntools/icons/` に配置。配布に含めるファイルのハッシュを生成する：
+
+```bash
+python release.py 1.0.2
+git add .
+git commit -m "Release nTools v1.0.2"
+git push
+```
+
+更新時はバージョン番号を必ず増加させる。新しいツールの追加・削除やボタンの順序・説明・アイコンファイル名変更がある場合、学生は更新後に既存nToolsタブをMayaのShelf Editorで削除・保存し、再起動後Repair Shelfを実行する。通常のツール本体変更だけなら不要。既存ボタンの説明やバージョン表記（旧版シェルフ）は自動更新されない。
+
+## 復旧
+
+- ファイル更新中の失敗では、旧パッケージへの復元を試みる。失敗ログとバックアップのパスをScript Editorで確認する。
+- 新規シェルフ登録中に問題が発生した場合、本体を保持する。部分的なシェルフを自動削除しない。MayaのUIが正常ならShelf EditorでnToolsだけを整理する。
+- UIバックアップは `cmds.internalVar(userScriptDir=True)` の `.ntools-ui-backups` にある。必要に応じてMaya終了中に、現行設定を別途バックアップしてから復元する。自動復元は行わない。バックアップ対象は存在するuserPrefs.mel、menuSetPrefs.mel、windowPrefs.mel、userHotkeys.mel、shelf_nTools.mel。完全なprefsバックアップではない。
+- Maya.envを編集する処理はない。設定の破損原因が特定できない場合、Mayaの設定フォルダ全体を別名に変更して再起動し、必要な設定のみ戻す。
+- アンインストール後の本体バックアップは `.ntools-uninstalled-*`。手動復元するならMayaを終了し、既存ntoolsフォルダがないことを確認してから名前をntoolsに戻し、再起動後Repair Shelf。
+
+## 検証範囲
+
+Python構文、ハッシュ、ZIP、ファイル置換、模擬Maya APIによる処理のテストを実施可能。実際のMaya 2027.2のUI動作、再起動後の保持、Mac環境およびGitHub接続は実機検証が必要。
