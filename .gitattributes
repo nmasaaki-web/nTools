@@ -1,0 +1,4 @@
+# Manifest checksums cover exact bytes: prevent Git CRLF/LF conversion.
+install.py -text
+scripts/ntools/** -text
+*.png binary

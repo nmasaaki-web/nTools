@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "package": "nTools",
+  "version": "1.0.0",
+  "tools": [
+    {
+      "id": "sketchfab",
+      "module": "sketchfab_asset_browser",
+      "entry": "show",
+      "label": "Sketchfab Asset Browser",
+      "short": "SF",
+      "version": "1.2",
+      "icon": "sketchfab.png",
+      "description": "Search and import static glTF assets; OpenPBR"
+    },
+    {
+      "id": "polyhaven",
+      "module": "polyhaven_asset_browser",
+      "entry": "show",
+      "label": "PolyHaven Asset Browser",
+      "short": "PH",
+      "version": "5.2",
+      "icon": "polyhaven.png",
+      "description": "Poly Haven assets, HDRI, local library and OpenPBR"
+    },
+    {
+      "id": "material",
+      "module": "material_creator",
+      "entry": "show",
+      "label": "Material Creator",
+      "short": "MAT",
+      "version": "1.3",
+      "icon": "material.png",
+      "description": "Create OpenPBR materials from local textures or JSON"
+    },
+    {
+      "id": "quadruped",
+      "module": "quadruped_quick_rig",
+      "entry": "show_ui",
+      "label": "Quadruped Quick Rig",
+      "short": "RIG",
+      "version": "2.4.0",
+      "icon": "quadruped.png",
+      "description": "Four-legged guides, IK/FK and experimental retarget",
+      "opens_on_import": true
+    }
+  ],
+  "files": {
+    "install.py": "2cbd62123af759cc8d1b9b8bdac1d54996922158ba46d1c73d32564ea89ee05c",
+    "scripts/ntools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
+    "scripts/ntools/tools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
+    "scripts/ntools/tools/material_creator.py": "681389d5fd58611a7bcd0bf259621673b1a2550465d73ce044dfffe13f412173",
+    "scripts/ntools/tools/polyhaven_asset_browser.py": "1d083bae398f95ffb5bf366e522266497a287cf1094291c218072de2a491887c",
+    "scripts/ntools/tools/quadruped_quick_rig.py": "4dd7073ca5d8deaf32845168b9210851b396db5ca27de34f2c5dfbc24daf8b34",
+    "scripts/ntools/tools/sketchfab_asset_browser.py": "8221d6d7cd8631ad4b29daff927bdb683aa9771bc45cb3408728c1eb9d5e24b3",
+    "scripts/ntools/icons/material.png": "b946aa685512079926ea59f118b86a66f7286c95265fb269ede5331fd1d9d50a",
+    "scripts/ntools/icons/polyhaven.png": "309e91197d7430f498e01429da59d11324d995135c2f69bff392657066814156",
+    "scripts/ntools/icons/quadruped.png": "1e523eb8637d4801f4f08793b709efe561bfbd84b1bfa9ecf1048cdd6a308609",
+    "scripts/ntools/icons/sketchfab.png": "7e7d5d5dc7b829d348f1fe3632edf266e4236920e606c8cdadc845f5b7f2805a",
+    "scripts/ntools/icons/update.png": "591e975631fc65039d20ae3be53c2951eb9f47e3ec4c2490fe49d71a3a3185ff"
+  }
+}
