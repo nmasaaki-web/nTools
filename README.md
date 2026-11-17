@@ -1,4 +1,4 @@
-# nTools v1.0.9
+# nTools v1.0.10
 
 Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
@@ -13,17 +13,19 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 
 | アイコン | ツール・操作マニュアル | バージョン | 機能 |
 |---|---|---|---|
-| [![SF](scripts/ntools/icons/sketchfab.png)](docs/tools/sketchfab.md) | [Sketchfab Asset Browser](docs/tools/sketchfab.md) | 1.2 | 静的glTFモデルの検索・インポート、OpenPBR |
+| [![SF](scripts/ntools/icons/sketchfab.png)](docs/tools/sketchfab.md) | [Sketchfab Asset Browser](docs/tools/sketchfab.md) | 1.3 | 静的glTFモデル、Specular-Glossiness自動変換、OpenPBR |
 | [![PH](scripts/ntools/icons/polyhaven.png)](docs/tools/polyhaven.md) | [PolyHaven Asset Browser](docs/tools/polyhaven.md) | 5.2 | モデル・テクスチャ・HDRI、ローカルライブラリ |
 | [![CITY](scripts/ntools/icons/city.png)](docs/tools/city_builder.md) | [Maya City Builder](docs/tools/city_builder.md) | 2.4.1 | OSM / PLATEAU / Procedural / 日本風の街並み生成 |
 | [![MAT](scripts/ntools/icons/material.png)](docs/tools/material_creator.md) | [Material Creator](docs/tools/material_creator.md) | 1.3 | ローカルテクスチャ / JSONからOpenPBR作成 |
 | [![RIG](scripts/ntools/icons/quadruped.png)](docs/tools/quadruped.md) | [Quadruped Quick Rig](docs/tools/quadruped.md) | 2.4.0 | 四足ガイド、IK/FK、試験的なリターゲット |
 
+> v1.0.10ではSketchfab Asset Browser v1.3を収録し、Specular-GlossinessからMetallic-Roughnessへの変換に対応しました（テクスチャ・透明度を含む）。全glTF拡張に対応するわけではありません。
+
 > v1.0.5では各ツール右上にHelpを追加し、シェルフにHelpを追加しました。既存4ツールのマニュアルに操作図・GIF・MP4を掲載しています（実機キャプチャではありません）。v1.0.7でRIGとHelpの間にSeparatorを追加しました。v1.0.8ではCITYをMATの左に追加します。v1.0.3〜1.0.7からはUpdate → Maya再起動 → Update（もう一度）で移行できます。管理コードの実行は不要です。
 
 ## 初回導入（学生）
 
-v1.0.9から、インストール時に利用上の注意の確認・同意が必要です。未チェックでは導入できません。確認画面はオフラインでも全文を表示し、同意の記録や個人情報を外部送信しません。既存のUpdate処理は変更していないため、シェルフからの通常更新では同意画面は表示されません。
+v1.0.9以降、インストール時に利用上の注意の確認・同意が必要です。未チェックでは導入できません。確認画面はオフラインでも全文を表示し、同意の記録や個人情報を外部送信しません。既存のUpdate処理は変更していないため、シェルフからの通常更新では同意画面は表示されません。
 
 1. [GitHub](https://github.com/nmasaaki-web/nTools) の Code → Download ZIP を選択し、展開する。
 2. Mayaを起動し、Fileメニュー・メニューセット・シェルフが正常に表示されていることを確認。作業中のシーンを保存する。
@@ -42,7 +44,7 @@ if p:
 
 ## 旧版 v1.0.0〜1.0.2 からの移行（重要）
 
-旧版のUpdateはシェルフを再登録するため、**旧版のUpdateを押さず**、v1.0.9のZIPをダウンロードして上記のインストールを行う。まずFiles Onlyを選択し、Mayaを再起動してUIが正常か確認することを推奨。Files Onlyでは既存のnToolsシェルフを変更しない。再起動後、正常な既知のシェルフならUpdateで不足するCity Builder・管理ボタン・Separatorを追加できる。タブがない場合は次のRepair Shelfを実行する。
+旧版のUpdateはシェルフを再登録するため、**旧版のUpdateを押さず**、最新版のZIPをダウンロードして上記のインストールを行う。まずFiles Onlyを選択し、Mayaを再起動してUIが正常か確認することを推奨。Files Onlyでは既存のnToolsシェルフを変更しない。再起動後、正常な既知のシェルフならUpdateで不足するCity Builder・管理ボタン・Separatorを追加できる。タブがない場合は次のRepair Shelfを実行する。
 
 ## 管理・修復・アンインストール
 
@@ -82,7 +84,7 @@ nt.uninstall()
 
 ## v1.0.3〜1.0.7からの移行（スクリプト不要）
 
-1. GitHubにv1.0.9が公開されている状態で、既存のシェルフ右端のUpdateを押す。
+1. GitHubに最新版が公開されている状態で、既存のシェルフ右端のUpdateを押す。
 2. 本体更新後、Mayaを再起動する。旧版の更新処理はCITYの追加を知らないため、シェルフ構成不一致と表示されることがある。本体更新が完了していれば再起動後のUpdateで移行できる。
 3. **Updateをもう一度押す。** 本体が最新版でも不足するCity Builder・管理ボタン・Separatorを確認・追加する。SF → PH → CITY → MAT → RIG → Separator → Help → Uninstall → Updateの順になる。この操作だけなら再起動不要。
 
@@ -149,7 +151,7 @@ nTools（各ツール、インストーラー、更新・削除機能、サン�
 
 ## 安全性と復旧
 
-v1.0.9は通常更新でシェルフを再構築せず、Maya.env、userSetup、メニューセット、ワークスペース、他のシェルフを直接編集しない。シェルフ登録・削除の直前にメニュー状態を確認し、関連する設定ファイル（存在するもの）をコピーして保存する。Mayaの標準処理による設定変更はあり得る。
+v1.0.10は通常更新でシェルフを再構築せず、Maya.env、userSetup、メニューセット、ワークスペース、他のシェルフを直接編集しない。シェルフ登録・削除の直前にメニュー状態を確認し、関連する設定ファイル（存在するもの）をコピーして保存する。Mayaの標準処理による設定変更はあり得る。
 
 本体はMayaのユーザースクリプトディレクトリ内の `ntools` に保存。バックアップは同じ親フォルダ内の `.ntools-backup-*`、`.ntools-uninstalled-*`、`.ntools-ui-backups`。バックアップを自動で削除しない。シェルフ登録失敗時は本体を保持し、UIを自動削除・全設定復元しない。
 
@@ -164,6 +166,6 @@ UIがおかしくなった場合は操作を中止し、Mayaの再起動・標�
 1. Mayaを終了し、2027の設定フォルダをバックアップ。
 2. `prefs/shelves` 内のnTools関連ファイル（`shelf_nTools.mel`、`shelf_nTools.mel.mel`、`.deleted` 等）を設定フォルダ外へ移動。他のシェルフは移動しない。
 3. `prefs/userPrefs.mel` を設定フォルダ外へ退避して再起動。必要なら `prefs` 全体を名前変更して初期化。設定が一部初期化されるのでバックアップを保持。Maya.envは削除不要。
-4. UIが正常に戻った後、v1.0.9の `install.py` からFiles Onlyで導入し、再起動。その後Repair Shelfを実行し、再起動して検証。旧版のUpdateは使わない。
+4. UIが正常に戻った後、最新版の `install.py` からFiles Onlyで導入し、再起動。その後Repair Shelfを実行し、再起動して検証。旧版のUpdateは使わない。
 
 新版は拡張子なしのパスを `saveShelf` に渡し、期待したファイルの存在と異常なシェルフ名を検査します。実際のMaya 2027.2での確認が完了するまでは学生に配布しないでください。

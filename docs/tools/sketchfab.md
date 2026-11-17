@@ -1,10 +1,10 @@
-# Sketchfab Asset Browser v1.2
+# Sketchfab Asset Browser v1.3
 
 [← nTools トップへ戻る](../../README.md)
 
 ![Sketchfab](../../scripts/ntools/icons/sketchfab.png)
 
-Sketchfabのダウンロード可能な3Dモデルを検索し、Mayaへ静的メッシュとして読み込み、OpenPBRマテリアルを設定するツールです。
+Sketchfabのダウンロード可能な3Dモデルを検索し、Mayaへ静的メッシュとして読み込み、OpenPBRマテリアルを設定するツールです。v1.3で旧式のSpecular-Glossinessマテリアルの自動変換に対応しました。
 
 ## クイックガイド（図解・GIF・動画）
 
@@ -45,15 +45,30 @@ Sketchfabのダウンロード可能な3Dモデルを検索し、Mayaへ静的�
 
 `Import local .gltf (static, no login)` を押し、展開済みの `.gltf` ファイルを選択します。対応する `.bin` や画像ファイルも元の相対パスのまま置いてください。ローカル読み込みにAPIトークンは不要ですが、元データのライセンス確認は必要です。
 
-## 5. 制限・よくある問題
+## 5. Specular-Glossiness の自動変換（v1.3 新機能）
+
+Sketchfabの一部モデルでは、glTFに `KHR_materials_pbrSpecularGlossiness` が含まれており、旧v1.2では「Unsupported required glTF extensions」と表示されていました。v1.3では、この方式を検出すると自動でOpenPBR用の **Metallic-Roughness** マップへ変換します。
+
+- `diffuseFactor` / Diffuseテクスチャ（RGB・透明度）を読み込みます。
+- `specularFactor` とSpecular-Glossinessテクスチャの **RGB（Specular）** を読み込みます。
+- `glossinessFactor` とSpecular-Glossinessテクスチャの **A（Glossiness）** を使い、`Roughness = 1 − Glossiness` で変換します。
+- 色の計算はリニア空間で行い、OpenPBR用のBase Color（sRGB画像）とMetallic / Roughness（Raw画像）を生成・接続します。
+- Alpha Mode（MASK / BLEND）およびDiffuse側の透明度を維持するようにしています。
+- 変換後の画像は、現在のMayaプロジェクト内の `sourceimages/Sketchfab/_converted_specgloss/` にキャッシュします。生成した画像は元データを上書きしません。
+
+**ご注意：** 異なるマテリアルモデル間の変換は近似です。特に色付き鏡面反射、特殊な誘電体反射、複雑なマテリアルではSketchfab上の見た目と完全一致しません。高解像度画像はメモリ保護のため最大約2Kへ縮小します。異なるUVセット、Texture Transform、異なるラップ方式、Draco圧縮、KTX2などの未対応方式は安全のためインポートを中止し、エラー内容を表示します。現状、Static glTFのみの対応です。
+
+> 参照仕様：[Khronos — KHR_materials_pbrSpecularGlossiness](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Archived/KHR_materials_pbrSpecularGlossiness/README.md)
+
+## 6. 制限・よくある問題
 
 | 症状 | 確認すること |
 |---|---|
 | ダウンロードできない | APIトークン、モデルのダウンロード権限、通信環境を確認。検索結果が表示されてもダウンロードできるとは限りません。 |
 | サムネイルが遅い | `List View (lightweight)` を使用。 |
 | リグ・アニメーションがない | 本版は静的glTF用です。スキン、アニメーション、モーフは転送されません。 |
-| 読み込めないglTF | 非圧縮の三角形メッシュを対象としています。Draco圧縮、未対応の必須拡張、疎なアクセサ、UV0以外のマテリアルなどは非対応です。 |
-| 見た目が元サイトと異なる | テクスチャ変換や一部のマテリアル拡張、頂点カラー、AOなどは省略・近似されます。Arnold側で調整してください。 |
+| 読み込めないglTF | 非圧縮の三角形メッシュが対象です。Specular-Glossinessは対応しましたが、Draco圧縮、未対応の必須拡張、疎なアクセサ、UV0以外のマテリアルなどは非対応です。 |
+| 見た目が元サイトと異なる | Specular-GlossinessはMetallic-Roughnessへ近似変換します。一部のマテリアル拡張、頂点カラー、AOなどは省略・近似されます。Arnold側で調整してください。 |
 
 APIトークンは他人に渡さず、GitHubや提出シーンの説明欄に貼らないでください。Sketchfabのすべての作品が自由利用できるわけではありません。
 

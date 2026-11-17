@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "nTools",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "tools": [
     {
       "id": "sketchfab",
@@ -9,9 +9,9 @@
       "entry": "show",
       "label": "Sketchfab Asset Browser",
       "short": "SF",
-      "version": "1.2",
+      "version": "1.3",
       "icon": "sketchfab.png",
-      "description": "Search and import static glTF assets; OpenPBR"
+      "description": "Static glTF asset import; OpenPBR including Specular-Glossiness conversion"
     },
     {
       "id": "polyhaven",
@@ -56,14 +56,14 @@
     }
   ],
   "files": {
-    "install.py": "74417b282aae4e39c7e353d3582ed8c9c51e95ab50e1c109c3aac07bbb8f7100",
+    "install.py": "ff90019078cbbd103c4b058e70106de7e1bd01889c8e91b95288b05e6d432538",
     "scripts/ntools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/material_creator.py": "36e16e108120600abddacec4a6415cb9ce408b78063720ca1542bb05bfcb00e1",
     "scripts/ntools/tools/maya_city_builder.py": "e3200ff543c3974aa14426ef6323570692b8bc0e5be414503ab9059d370db8b9",
     "scripts/ntools/tools/polyhaven_asset_browser.py": "ab13591e4d99d06591ee4d993adeca866b089b16f90ab4d62f8ca37de91c92fa",
     "scripts/ntools/tools/quadruped_quick_rig.py": "490401df593f436e22ba5f9abc269e135dc3ca45a9682687f93067daf04842c2",
-    "scripts/ntools/tools/sketchfab_asset_browser.py": "758611e8a1c70d13ab7871d036242122963f77537102b2de654a27689eabcd90",
+    "scripts/ntools/tools/sketchfab_asset_browser.py": "689e0b947f597f82da660b2275fd1901650688f069a2f55b0130b33cbd524179",
     "scripts/ntools/icons/city.png": "12c0f8a7e70ab282a9db18768d41881c41eb36d24e3b76e6000aa30c46418cec",
     "scripts/ntools/icons/help.png": "21af284d81387fecac3ab4226f9378c03e1a84dcbb090f717c5a849a379c8f5d",
     "scripts/ntools/icons/material.png": "b946aa685512079926ea59f118b86a66f7286c95265fb269ede5331fd1d9d50a",

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Sketchfab Asset Browser v1.2 (Windows/macOS, static glTF, Maya 2025+ OpenPBR).
+"""Sketchfab Asset Browser v1.3 (Windows/macOS, static glTF, Maya 2025+ OpenPBR).
 Run entire file in Maya Python Script Editor, or import and call show().
 No third-party Python packages. Sketchfab API token belongs to each user.
 """
-import os, re, json, struct, base64, zipfile, shutil, tempfile, urllib.request, urllib.parse
+import os, re, json, struct, base64, zipfile, shutil, tempfile, urllib.request, urllib.parse, hashlib
 import sys, subprocess, math
 from pathlib import Path
 import maya.cmds as c
@@ -17,7 +17,7 @@ def safe(s):
 
 # On macOS, use the OS-provided curl rather than Maya's embedded SSL library.
 # Keep certificate and hostname checks enabled on both platforms.
-USER_AGENT = 'MayaSketchfabAssetBrowser/1.2'
+USER_AGENT = 'MayaSketchfabAssetBrowser/1.3'
 MAC_CURL = '/usr/bin/curl'
 
 def https_url(url):
@@ -155,12 +155,70 @@ def acquire(uid, token):
         shutil.move(str(unpack),str(root)); (root/'_complete').touch()
         return root/rel
 
+# Khronos KHR_materials_pbrSpecularGlossiness -> metallic/roughness approximation.
+# Based on the archived Khronos extension conversion example. The source values
+# and glTF factors are LINEAR; only texture RGB channels are encoded as sRGB.
+# Glossiness and alpha channels are linear and must not be gamma-decoded.
+_SPEC_DIELECTRIC = 0.04
+
+
+def _sf_brightness(rgb):
+    return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2]
+
+
+def _sf_convert_factor(diffuse, specular, glossiness):
+    """Convert linear RGB factors; return (linear baseColor, metalness, roughness)."""
+    diffuse = [min(1., max(0., float(x))) for x in diffuse[:3]]
+    specular = [min(1., max(0., float(x))) for x in specular[:3]]
+    strength = 1. - max(specular)
+    spec_b = _sf_brightness(specular)
+    diff_b = _sf_brightness(diffuse)
+    if spec_b < _SPEC_DIELECTRIC:
+        metal = 0.
+    else:
+        a = _SPEC_DIELECTRIC
+        b = diff_b * strength / (1. - a) + spec_b - 2. * a
+        c_ = a - spec_b
+        metal = min(1., max(0., (-b + math.sqrt(max(0., b*b - 4.*a*c_))) / (2.*a)))
+    from_diff = [x * strength / ((1.-_SPEC_DIELECTRIC)*max(1.-metal,1e-6)) for x in diffuse]
+    from_spec = [(x-_SPEC_DIELECTRIC*(1.-metal)) / max(metal,1e-6) for x in specular]
+    blend = metal*metal
+    color = [min(1.,max(0.,(1.-blend)*a+blend*b)) for a,b in zip(from_diff,from_spec)]
+    return color, metal, min(1., max(0., 1.-float(glossiness)))
+
+
+def _sf_srgb_to_linear(rgb, np):
+    return np.where(rgb<=.04045, rgb/12.92, ((rgb+.055)/1.055)**2.4)
+
+
+def _sf_linear_to_srgb(rgb, np):
+    rgb=np.clip(rgb,0.,1.)
+    return np.where(rgb<=.0031308, 12.92*rgb, 1.055*rgb**(1./2.4)-.055)
+
+
+def _sf_convert_array(diffuse, specular, glossiness, np):
+    """Vectorized Khronos-style conversion for Nx3 linear colors and N gloss."""
+    strength=1.-np.max(specular,axis=-1)
+    spec_b=specular @ np.array([.2126,.7152,.0722], dtype=np.float32)
+    diff_b=diffuse @ np.array([.2126,.7152,.0722], dtype=np.float32)
+    a=_SPEC_DIELECTRIC
+    b=diff_b*strength/(1.-a)+spec_b-2.*a
+    cc=a-spec_b
+    metal=np.clip((-b+np.sqrt(np.maximum(0.,b*b-4.*a*cc)))/(2.*a),0.,1.)
+    metal=np.where(spec_b<a, 0., metal)
+    from_diff=diffuse*strength[:,None]/((1.-a)*np.maximum(1.-metal[:,None],1e-6))
+    from_spec=(specular-a*(1.-metal[:,None]))/np.maximum(metal[:,None],1e-6)
+    blend=metal[:,None]**2
+    base=np.clip(from_diff*(1.-blend)+from_spec*blend,0.,1.)
+    return base,metal,np.clip(1.-glossiness,0.,1.)
+
+
 class GLTF:
     def __init__(self,path):
         self.path=Path(path); self.root=self.path.parent
         self.d=json.loads(self.path.read_text(encoding='utf-8-sig'))
         self.buffers=[self.bytes(b['uri']) for b in self.d.get('buffers',[])]
-        self.materials={}; self.files={}; self.warnings=set()
+        self.materials={}; self.files={}; self.warnings=set(); self.specgloss_count=0
         self.unit={'mm':1000,'cm':100,'m':1,'km':.001,'in':39.37007874,'ft':3.280839895,'yd':1.0936133,'mi':.000621371}.get(c.currentUnit(q=True,linear=True),100)
         # OpenMaya points are always centimeters, regardless of UI units.
         self.preflight()
@@ -168,7 +226,7 @@ class GLTF:
         if uri.startswith('data:'): return base64.b64decode(uri.split(',',1)[1])
         return local(self.root,uri).read_bytes()
     def preflight(self):
-        unsupported=set(self.d.get('extensionsRequired',[]))-{'KHR_materials_unlit','KHR_texture_transform','KHR_materials_emissive_strength'}
+        unsupported=set(self.d.get('extensionsRequired',[]))-{'KHR_materials_unlit','KHR_texture_transform','KHR_materials_emissive_strength','KHR_materials_pbrSpecularGlossiness'}
         if unsupported: raise ValueError('Unsupported required glTF extensions: '+', '.join(sorted(unsupported)))
         if self.d.get('skins') or self.d.get('animations'): self.warnings.add('Skins/animations: static base pose only; no rig or animation imported.')
         for m in self.d.get('meshes',[]):
@@ -177,7 +235,7 @@ class GLTF:
                 if p.get('targets'): self.warnings.add('Morph targets omitted.')
                 if 'COLOR_0' in p.get('attributes',{}): self.warnings.add('Vertex colors are not imported.')
         for m in self.d.get('materials',[]):
-            if m.get('extensions'): self.warnings.add('Some material extensions are approximated or omitted.')
+            if set(m.get('extensions',{})) - {'KHR_materials_pbrSpecularGlossiness','KHR_materials_unlit','KHR_materials_emissive_strength'}: self.warnings.add('Some material extensions are approximated or omitted.')
     def accessor(self,i):
         a=self.d['accessors'][i]
         if 'sparse' in a or 'bufferView' not in a: raise ValueError('Sparse accessors are not supported.')
@@ -200,12 +258,12 @@ class GLTF:
         ext={'image/jpeg':'.jpg','image/png':'.png','image/webp':'.webp'}.get(mime)
         if not ext: raise ValueError('Unsupported embedded image: '+mime)
         p=self.root/('_embedded_'+str(i)+ext); p.write_bytes(data); return p
-    def texture(self,info,space):
+    def texture(self,info,space,image_override=None):
         idx=info['index']; tex=self.d['textures'][idx]; tr=info.get('extensions',{}).get('KHR_texture_transform',{})
         uv=tr.get('texCoord',info.get('texCoord',0))
         if uv!=0: raise ValueError('Material uses UV set other than TEXCOORD_0; unsupported in v1.')
         if tr: self.warnings.add('KHR_texture_transform omitted; texture placement may differ.')
-        key=(idx,space)
+        key=(idx,space,str(image_override) if image_override else None)
         if key in self.files: return self.files[key]
         if 'source' not in tex: raise ValueError('Compressed or unsupported texture format.')
         f=c.shadingNode('file',asTexture=True,name='SF_tex#'); p=c.shadingNode('place2dTexture',asUtility=True,name='SF_place#')
@@ -219,7 +277,7 @@ class GLTF:
                 mode=sm.get(prop,10497)
                 if mode==33071: c.setAttr(p+'.wrap'+axis,0)
                 elif mode==33648: c.setAttr(p+'.mirror'+axis,1)
-        c.setAttr(f+'.fileTextureName',str(self.image(tex['source'])).replace('\\','/'),type='string')
+        c.setAttr(f+'.fileTextureName',str(image_override if image_override else self.image(tex['source'])).replace('\\','/'),type='string')
         if c.attributeQuery('ignoreColorSpaceFileRules',node=f,exists=True): c.setAttr(f+'.ignoreColorSpaceFileRules',1)
         spaces=c.colorManagementPrefs(q=True,inputSpaceNames=True) or []
         candidates=['sRGB','Utility - sRGB - Texture','sRGB - Texture'] if space=='sRGB' else ['Raw','Utility - Raw']
@@ -232,18 +290,163 @@ class GLTF:
     def color(self,src,dst,factor):
         if tuple(factor)==(1,1,1): c.connectAttr(src,dst,force=True); return
         n=c.shadingNode('multiplyDivide',asUtility=True,name='SF_colorFactor#'); c.connectAttr(src,n+'.input1'); c.setAttr(n+'.input2',*factor,type='double3'); c.connectAttr(n+'.output',dst,force=True)
+    def _sf_qimage(self, info, width=None, height=None):
+        """Read an RGBA image via Maya-bundled Qt, retaining straight alpha."""
+        tx = self.d['textures'][info['index']]
+        if 'source' not in tx:
+            raise ValueError('Specular-Glossiness texture uses unsupported compressed format.')
+        filename = self.image(tx['source'])
+        reader = QtGui.QImageReader(str(filename))
+        original_size = reader.size()
+        if original_size.isValid() and max(original_size.width(),original_size.height())>2048:
+            scale=min(2048/original_size.width(),2048/original_size.height())
+            reader.setScaledSize(QtCore.QSize(max(1,round(original_size.width()*scale)),max(1,round(original_size.height()*scale))))
+            self.warnings.add('Specular-Glossiness source textures larger than 2K decoded at reduced resolution.')
+        im = reader.read()
+        if im.isNull():
+            raise ValueError('Cannot decode Specular-Glossiness texture: '+filename.name+' ('+reader.errorString()+')')
+        rgba = QtGui.QImage.Format_RGBA8888 if hasattr(QtGui.QImage,'Format_RGBA8888') else QtGui.QImage.Format.Format_RGBA8888
+        im = im.convertToFormat(rgba)
+        if width is not None and (im.width()!=width or im.height()!=height):
+            mode = QtCore.Qt.SmoothTransformation if hasattr(QtCore.Qt,'SmoothTransformation') else QtCore.Qt.TransformationMode.SmoothTransformation
+            im = im.scaled(width,height,QtCore.Qt.IgnoreAspectRatio if hasattr(QtCore.Qt,"IgnoreAspectRatio") else QtCore.Qt.AspectRatioMode.IgnoreAspectRatio,mode)
+        return im
+
+    def _sf_bake_specgloss(self, index, material, ext):
+        """Bake per-texel Spec/Gloss into glTF metallic-roughness maps.
+
+        Uses Maya's bundled NumPy and PySide; no pip installation or external
+        conversion tools. We do not silently bake incompatible UV transforms.
+        """
+        try:
+            import numpy as np
+        except ImportError as e:
+            raise RuntimeError('Maya-bundled NumPy is required for textured Specular-Glossiness conversion.') from e
+        d_info=ext.get('diffuseTexture'); s_info=ext.get('specularGlossinessTexture')
+        infos=[info for info in (d_info,s_info) if info is not None]
+        for info in infos:
+            uv=info.get('extensions',{}).get('KHR_texture_transform',{}).get('texCoord',info.get('texCoord',0))
+            if uv!=0:
+                raise ValueError('Specular-Glossiness conversion requires UV0 (TEXCOORD_0).')
+            if info.get('extensions',{}).get('KHR_texture_transform'):
+                raise ValueError('Specular-Glossiness textures with KHR_texture_transform need a separate UV bake; no silent approximation.')
+        if len(infos)==2:
+            # One baked map cannot reproduce separate sampling/UV transforms.
+            def sampler(info):
+                tx=self.d['textures'][info['index']]
+                return self.d.get('samplers',[])[tx['sampler']] if 'sampler' in tx else {}
+            if any(sampler(d_info).get(k,10497)!=sampler(s_info).get(k,10497) for k in ('wrapS','wrapT')):
+                raise ValueError('Diffuse and Specular-Glossiness use different wrap modes; cannot bake into a single UV set.')
+        sources = []
+        for info in infos:
+            tx = self.d['textures'][info['index']]
+            if 'source' not in tx: raise ValueError('Compressed Specular-Glossiness texture not supported.')
+            sources.append(self.image(tx['source']))
+        signature = json.dumps(material,sort_keys=True,ensure_ascii=False)
+        for source in sources:
+            stat=source.stat()
+            signature += str(source.resolve())+str(stat.st_size)+str(stat.st_mtime_ns)
+        signature += str(self.path.resolve())
+        digest = hashlib.sha256(signature.encode('utf-8')).hexdigest()[:24]
+        folder = cache_dir() / '_converted_specgloss' / digest
+        bc_path=folder/('material_%d_basecolor.png'%index)
+        mr_path=folder/('material_%d_metalrough.png'%index)
+        if bc_path.is_file() and mr_path.is_file() and bc_path.stat().st_size>0 and mr_path.stat().st_size>0:
+            return bc_path, mr_path, d_info or s_info
+        images={}
+        for label,info in (('diffuse',d_info),('specgloss',s_info)):
+            if info is not None: images[label]=self._sf_qimage(info)
+        w=max(im.width() for im in images.values())
+        h=max(im.height() for im in images.values())
+        # Bound converted map size to preserve responsiveness on student laptops.
+        if max(w,h)>2048:
+            scale=min(2048/w,2048/h); w=max(1,round(w*scale)); h=max(1,round(h*scale))
+            self.warnings.add('Specular-Glossiness converted textures resized to 2K for memory safety.')
+        for im in images.values():
+            if abs(im.width()/im.height()-w/h)>0.02:
+                raise ValueError('Diffuse and Spec/Gloss texture aspect ratios differ; cannot align baked pixels.')
+        def pixels(im):
+            if im.width()!=w or im.height()!=h:
+                mode=QtCore.Qt.SmoothTransformation if hasattr(QtCore.Qt,'SmoothTransformation') else QtCore.Qt.TransformationMode.SmoothTransformation
+                im=im.scaled(w,h,QtCore.Qt.IgnoreAspectRatio if hasattr(QtCore.Qt,"IgnoreAspectRatio") else QtCore.Qt.AspectRatioMode.IgnoreAspectRatio,mode)
+            # Qt image scanlines may have padding, but RGBA8888 is 4 bytes/pixel.
+            buf=im.constBits()
+            if hasattr(buf,'setsize'):buf.setsize(im.sizeInBytes() if hasattr(im,'sizeInBytes') else im.byteCount())
+            return np.frombuffer(buf, dtype=np.uint8, count=w*h*4).reshape((h,w,4)).copy()
+        diffuse=pixels(images['diffuse']) if 'diffuse' in images else None
+        spec=pixels(images['specgloss']) if 'specgloss' in images else None
+        diffuse_factor=np.asarray(ext.get('diffuseFactor',[1,1,1,1]),dtype=np.float32)
+        spec_factor=np.asarray(ext.get('specularFactor',[1,1,1]),dtype=np.float32)
+        gloss_factor=float(ext.get('glossinessFactor',1))
+        base_out=np.empty((h,w,4),dtype=np.uint8)
+        mr_out=np.zeros((h,w,4),dtype=np.uint8);mr_out[:,:,3]=255
+        # Iterate in strips; avoid multi-hundred-megabyte intermediates.
+        for y in range(0,h,128):
+            y1=min(y+128,h); size=(y1-y)*w
+            d=(diffuse[y:y1].reshape(size,4).astype(np.float32)/255. if diffuse is not None else np.ones((size,4),dtype=np.float32))
+            sp=(spec[y:y1].reshape(size,4).astype(np.float32)/255. if spec is not None else np.ones((size,4),dtype=np.float32))
+            diffuse_linear=_sf_srgb_to_linear(d[:,:3],np)*diffuse_factor[:3]
+            spec_linear=_sf_srgb_to_linear(sp[:,:3],np)*spec_factor
+            gloss=np.clip(sp[:,3]*gloss_factor,0.,1.)
+            base,metal,rough=_sf_convert_array(diffuse_linear,spec_linear,gloss,np)
+            out=base_out[y:y1].reshape(size,4); mrt=mr_out[y:y1].reshape(size,4)
+            out[:,:3]=np.rint(_sf_linear_to_srgb(base,np)*255).astype(np.uint8)
+            out[:,3]=np.rint(np.clip(d[:,3]*diffuse_factor[3],0.,1.)*255).astype(np.uint8)
+            mrt[:,1]=np.rint(rough*255).astype(np.uint8)
+            mrt[:,2]=np.rint(metal*255).astype(np.uint8)
+            if float(np.min(np.max(spec_linear,axis=1)))<_SPEC_DIELECTRIC:
+                self.warnings.add('Very low dielectric F0 approximated as 0.04 in metallic/roughness conversion.')
+        folder.mkdir(parents=True,exist_ok=True)
+        fmt=QtGui.QImage.Format_RGBA8888 if hasattr(QtGui.QImage,'Format_RGBA8888') else QtGui.QImage.Format.Format_RGBA8888
+        def save(arr,path):
+            blob=arr.tobytes(); im=QtGui.QImage(blob,w,h,w*4,fmt)
+            temp=path.with_name(path.stem+'.tmp.png')
+            try:
+                if im.isNull() or not im.save(str(temp),'PNG'):raise RuntimeError('Could not write baked texture: '+str(path))
+                os.replace(temp,path)
+            finally:
+                if temp.exists():temp.unlink()
+        save(base_out,bc_path); save(mr_out,mr_path)
+        if len(images)==2 and (images['diffuse'].width()!=images['specgloss'].width() or images['diffuse'].height()!=images['specgloss'].height()):
+            self.warnings.add('Spec/Gloss texture sizes differed; resampled to common resolution.')
+        return bc_path,mr_path,d_info or s_info
+
+    def _sf_specgloss_material(self, index, material, node, ext):
+        df=ext.get('diffuseFactor',[1,1,1,1]);sf=ext.get('specularFactor',[1,1,1]);gf=ext.get('glossinessFactor',1)
+        self.specgloss_count+=1
+        if 'diffuseTexture' in ext or 'specularGlossinessTexture' in ext:
+            base_path,mr_path,uv_info=self._sf_bake_specgloss(index,material,ext)
+            base=self.texture(uv_info,'sRGB',image_override=base_path)
+            packed=self.texture(uv_info,'Raw',image_override=mr_path)
+            c.connectAttr(base+'.outColor',node+'.baseColor',force=True)
+            c.connectAttr(packed+'.outColorG',node+'.specularRoughness',force=True)
+            c.connectAttr(packed+'.outColorB',node+'.baseMetalness',force=True)
+            return [1.,1.,1.,1.],base
+        color,metal,rough=_sf_convert_factor(df[:3],sf,gf)
+        c.setAttr(node+'.baseColor',*color,type='double3')
+        c.setAttr(node+'.baseMetalness',metal)
+        c.setAttr(node+'.specularRoughness',rough)
+        if max(sf)<_SPEC_DIELECTRIC:
+            self.warnings.add('Specular F0 below 0.04 approximated in metallic/roughness conversion.')
+        return df,None
+
     def material(self,i):
         if i in self.materials: return self.materials[i]
         m=self.d.get('materials',[])[i] if i is not None else {}; p=m.get('pbrMetallicRoughness',{})
         n=c.shadingNode('openPBRSurface',asShader=True,name='SF_'+safe(m.get('name','Material'))+'#')
         sg=c.sets(renderable=True,noSurfaceShader=True,empty=True,name=n+'SG'); c.connectAttr(n+'.outColor',sg+'.surfaceShader',force=True)
-        bc=p.get('baseColorFactor',[1,1,1,1]); metal=p.get('metallicFactor',1); rough=p.get('roughnessFactor',1)
-        c.setAttr(n+'.baseColor',*bc[:3],type='double3'); c.setAttr(n+'.baseMetalness',metal); c.setAttr(n+'.specularRoughness',rough)
-        base=None
-        if 'baseColorTexture' in p:
-            base=self.texture(p['baseColorTexture'],'sRGB'); self.color(base+'.outColor',n+'.baseColor',bc[:3])
-        if 'metallicRoughnessTexture' in p:
-            f=self.texture(p['metallicRoughnessTexture'],'Raw'); self.scalar(f+'.outColorG',n+'.specularRoughness',rough); self.scalar(f+'.outColorB',n+'.baseMetalness',metal)
+        specgloss=m.get('extensions',{}).get('KHR_materials_pbrSpecularGlossiness')
+        if specgloss is not None:
+            # glTF requires extension materials to take priority over MR fallback.
+            bc,base=self._sf_specgloss_material(i if i is not None else 0,m,n,specgloss)
+        else:
+            bc=p.get('baseColorFactor',[1,1,1,1]); metal=p.get('metallicFactor',1); rough=p.get('roughnessFactor',1)
+            c.setAttr(n+'.baseColor',*bc[:3],type='double3'); c.setAttr(n+'.baseMetalness',metal); c.setAttr(n+'.specularRoughness',rough)
+            base=None
+            if 'baseColorTexture' in p:
+                base=self.texture(p['baseColorTexture'],'sRGB'); self.color(base+'.outColor',n+'.baseColor',bc[:3])
+            if 'metallicRoughnessTexture' in p:
+                f=self.texture(p['metallicRoughnessTexture'],'Raw'); self.scalar(f+'.outColorG',n+'.specularRoughness',rough); self.scalar(f+'.outColorB',n+'.baseMetalness',metal)
         if 'normalTexture' in m:
             f=self.texture(m['normalTexture'],'Raw')
             try:
@@ -358,8 +561,8 @@ def fetch_thumb(url):
 class Browser(QtWidgets.QDialog):
     def __init__(self,parent=None):
         super(Browser,self).__init__(parent)
-        self.setObjectName('SketchfabAssetBrowserV12')
-        self.setWindowTitle('Sketchfab Asset Browser v1.2 | Windows / macOS | OpenPBR')
+        self.setObjectName('SketchfabAssetBrowserV13')
+        self.setWindowTitle('Sketchfab Asset Browser v1.3 | Windows / macOS | OpenPBR')
         self.setAttribute(QtCore.Qt.WA_DeleteOnClose,True)
         self.resize(850,790); self.setMinimumSize(520,600)
         self.rows=[]; self.next=None; self.page=0; self.view_epoch=0; self.detail_epoch=0
@@ -370,7 +573,7 @@ class Browser(QtWidgets.QDialog):
         self.grid_pending=0; self.grid_done=0; self.grid_failed=0
         self.placeholder=self.make_placeholder()
         layout=QtWidgets.QVBoxLayout(self)
-        header=QtWidgets.QHBoxLayout(); header.addWidget(QtWidgets.QLabel('Models provided by Sketchfab | Static glTF / OpenPBR'),1)
+        header=QtWidgets.QHBoxLayout(); header.addWidget(QtWidgets.QLabel('Models provided by Sketchfab | Static glTF / OpenPBR (MR + Spec/Gloss)'),1)
         help_btn=QtWidgets.QPushButton('Help'); help_btn.setToolTip('日本語マニュアルを開く'); help_btn.clicked.connect(lambda checked=False: self.guard(lambda: self.open_url('https://github.com/nmasaaki-web/nTools/blob/main/docs/tools/sketchfab.md'))); header.addWidget(help_btn); layout.addLayout(header)
         form=QtWidgets.QFormLayout(); self.token=QtWidgets.QLineEdit(); self.token.setEchoMode(QtWidgets.QLineEdit.Password)
         form.addRow('API token',self.token); layout.addLayout(form)
@@ -551,7 +754,10 @@ class Browser(QtWidgets.QDialog):
         paths=c.fileDialog2(fileMode=1,fileFilter='glTF (*.gltf)',caption='Import local glTF') or []
         if paths: self.finish(Path(paths[0]),Path(paths[0]).stem,'Local asset: verify original license and author.')
     def finish(self,path,name,credit):
-        root,warnings=GLTF(path).run(name,credit); self.status.setText('Imported: '+root.split('|')[-1])
+        gltf=GLTF(path); root,warnings=gltf.run(name,credit)
+        label='Imported: '+root.split('|')[-1]
+        if gltf.specgloss_count: label+=' | Converted %d Spec/Gloss materials'%gltf.specgloss_count
+        self.status.setText(label)
         for w in warnings: c.warning(w)
         if warnings: c.confirmDialog(title='Imported with limitations',message='\n'.join(warnings),button=['OK'])
     def closeEvent(self,event):
@@ -564,7 +770,7 @@ def show():
     if c.window(WIN,exists=True): c.deleteUI(WIN)
     ptr=omui.MQtUtil.mainWindow(); parent=wrapInstance(int(ptr),QtWidgets.QWidget) if ptr else None
     if parent:
-        for version in ('SketchfabAssetBrowserV11','SketchfabAssetBrowserV12'):
+        for version in ('SketchfabAssetBrowserV11','SketchfabAssetBrowserV12','SketchfabAssetBrowserV13'):
             for old in parent.findChildren(QtWidgets.QDialog,version):
                 old.close()
     _browser=Browser(parent); _browser.show(); _browser.raise_(); _browser.activateWindow(); return _browser
