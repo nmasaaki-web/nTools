@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PolyHaven Asset Browser v5.3.1.
+"""PolyHaven Asset Browser v5.4.
 Paste into Maya Python Script Editor, or import polyhaven_asset_browser; call show().
 Poly Haven public API, local library, OpenPBR and Arnold. No Fab UI.
 """
@@ -32,7 +32,7 @@ except ImportError:
     except ImportError:
         QtCore = QtGui = QtWidgets = wrapInstance = None
 
-VERSION = '5.3.1'
+VERSION = '5.4'
 MESH_EXT = {'.fbx', '.obj'}
 IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.exr', '.tga', '.bmp', '.tx', '.hdr', '.webp'}
 SKIP_DIRS = {'.git', '__pycache__', 'node_modules', 'maya_asset_browser', 'standins', 'sourceimages'}
@@ -737,6 +737,37 @@ def components(shape, faces, total):
     return result
 
 
+def safe_auto_material_key(keys, hints):
+    """Return a uniquely supported texture-set match, never guess by SG index.
+
+    Maya FBX can generate synthetic SG names (e.g. fir_tree_01_a_LOD0SG1).
+    Numbers or the mesh tree-variant suffix are NOT trustworthy material IDs.
+    """
+    return match_set(keys, hints)
+
+
+def mapping_summary(settings, log, parent=None):
+    """Report unresolved bindings once, rather than asking students many times."""
+    unresolved=settings.get('_unresolved_materials', [])
+    if not unresolved:return
+    unique=list(dict.fromkeys((sg,shape) for sg,shape in unresolved))
+    log('WARNING: %d material assignment(s) could not be identified reliably.'%len(unique))
+    log('FBX materials were preserved, NOT verified against the Poly Haven thumbnail.')
+    log('If needles look opaque or bark looks wrong, check texture connections and alpha maps.')
+    if QtWidgets is not None and parent is not None:
+        box=QtWidgets.QMessageBox(parent)
+        box.setWindowTitle('マテリアルの確認が必要です')
+        box.setIcon(QtWidgets.QMessageBox.Warning)
+        box.setText('%d件のマテリアルを自動判定できませんでした。'%len(unique))
+        box.setInformativeText('元のFBXマテリアルは維持していますが、サムネイルと同じ見た目は保証されません。\n'
+                               '誤ったテクスチャを自動割り当てしないため、推測での置き換えは行いません。\n\n'
+                               '特に木の葉の透過（alpha）と幹の質感をご確認ください。\n'
+                               '必要な場合は「Advanced: Ask for ambiguous materials」を有効にして取り込み直してください。\n'
+                               '詳細なノード名は下部のログに表示されています。')
+        box.setStandardButtons(QtWidgets.QMessageBox.Ok)
+        box.exec() if hasattr(box,'exec') else box.exec_()
+
+
 def shader_hints(sg,shape):
     hints=[shape,sg]
     if sg and cmds.objExists(sg):
@@ -1026,6 +1057,7 @@ def import_asset(asset,settings,choose_mapping,log):
         tier=tier_of(mesh,asset.folder) if mesh else None
         mesh_lod=lod_of(mesh,asset.folder)[1] if mesh and lod_of(mesh,asset.folder)[0]=='LOD' else None
         keys=sorted(asset.textures)
+        settings['_unresolved_materials']=[]
         materials={}
         def material_for(key):
             nonlocal changed
@@ -1042,14 +1074,23 @@ def import_asset(asset,settings,choose_mapping,log):
                 for sg,faces in groups.items():
                     if not keys: continue
                     hints=shader_hints(sg,shape)
-                    # First trust original shader / texture names, then geometry name.
-                    key=match_set(keys,hints[1:]) or match_set(keys,[shape])
+                    # Trust only uniquely matching source shader/texture names.
+                    # Synthetic FBX SG1, SG2 etc are not meaningful texture-set IDs.
+                    key=safe_auto_material_key(keys,hints[1:]) or safe_auto_material_key(keys,[shape])
                     if key is None:
                         cache_key=sg or shape
-                        if cache_key not in remembered: remembered[cache_key]=choose_mapping(sg,shape,keys)
+                        if cache_key not in remembered:
+                            if settings.get('manual_mapping',False):
+                                remembered[cache_key]=choose_mapping(sg,shape,keys)
+                            else:
+                                remembered[cache_key]=None
                         key=remembered[cache_key]
-                    if key is not None: plans.append((shape,faces,total,key))
-                    else: log('  Keeping original material: '+str(sg)+' / '+shape)
+                    if key is not None:
+                        plans.append((shape,faces,total,key))
+                        log('  Auto / approved mapping: '+str(sg)+' -> '+key)
+                    else:
+                        settings['_unresolved_materials'].append((str(sg),str(shape)))
+                        log('  UNRESOLVED (kept FBX shader, not preview-verified): '+str(sg)+' / '+shape)
             for shape,faces,total,key in plans:
                 material=material_for(key)
                 members=components(shape,faces,total)
@@ -1064,9 +1105,13 @@ def import_asset(asset,settings,choose_mapping,log):
                     if choice=='cancel':raise UserCancelled('Heavy model import cancelled.')
                     if choice=='standin':settings['standin']=True
             if settings['standin']:
-                if not plans: log('WARNING: No OpenPBR assignments; exporting original material(s).')
-                try: root=export_standin(root,asset,log,settings.get('standin_split','auto'))
-                except Exception as e: log('WARNING: Stand-in failed; keeping editable geometry. '+str(e))
+                if settings['_unresolved_materials']:
+                    log('WARNING: ASS export skipped: ambiguous source material(s). Keeping editable mesh for inspection.')
+                elif not plans:
+                    log('WARNING: ASS export skipped: no material assignments verified. Keeping editable mesh.')
+                else:
+                    try: root=export_standin(root,asset,log,settings.get('standin_split','auto'))
+                    except Exception as e: log('WARNING: Stand-in failed; keeping editable geometry. '+str(e))
             cmds.select(root,replace=True)
         else:
             for key in keys: material_for(key)
@@ -1152,6 +1197,12 @@ if QtWidgets is not None:
             self.split_standin=QtWidgets.QCheckBox('Separate independent trees / groups into ASS'); self.split_standin.setChecked(True); self.split_standin.setToolTip('Automatically separate clearly distinct FBX groups.\nIf the FBX is flattened or its groups overlap, one ASS is exported to avoid splitting branches from leaves.'); form.addRow(self.split_standin)
             self.copy=QtWidgets.QCheckBox('Copy textures to Maya project'); self.copy.setChecked(True); form.addRow(self.copy)
             self.assign=QtWidgets.QCheckBox('Surfaces: assign to selection'); self.assign.setChecked(True); form.addRow(self.assign)
+            self.manual_mapping=QtWidgets.QCheckBox('Advanced: Ask for ambiguous materials')
+            self.manual_mapping.setChecked(False)
+            self.manual_mapping.setToolTip('OFF (recommended): never guess from FBX shading group numbers.\n'
+                                           'Keep unknown original shaders and report once after import.\n'
+                                           'ON (advanced): choose missing material assignments by hand.')
+            form.addRow(self.manual_mapping)
             pv.addLayout(form); self.toggle_displacement(False)
             self.detail=QtWidgets.QPlainTextEdit(); self.detail.setReadOnly(True); self.detail.setMinimumHeight(100); self.detail.setMaximumHeight(200); pv.addWidget(self.detail,1)
             self.import_btn=QtWidgets.QPushButton('IMPORT  /  CREATE OPENPBR'); self.import_btn.setMinimumHeight(40); self.import_btn.setEnabled(False); self.import_btn.clicked.connect(self.run_import); pv.addWidget(self.import_btn)
@@ -1268,7 +1319,7 @@ if QtWidgets is not None:
             self.update_details()
 
         def settings(self):
-            return dict(lod=self.lod.currentIndex(),family=self.family.currentData(),resolution=int(self.res.currentText().rstrip('K')),normal=self.normal.currentText(),displacement=self.disp.isChecked(),height=self.height.value(),mid=self.mid.value(),subdiv=self.subdiv.value(),standin=self.proxy.isChecked(),standin_split='auto' if self.split_standin.isChecked() else 'single',copy=self.copy.isChecked(),assign=self.assign.isChecked())
+            return dict(lod=self.lod.currentIndex(),family=self.family.currentData(),resolution=int(self.res.currentText().rstrip('K')),normal=self.normal.currentText(),displacement=self.disp.isChecked(),height=self.height.value(),mid=self.mid.value(),subdiv=self.subdiv.value(),standin=self.proxy.isChecked(),standin_split='auto' if self.split_standin.isChecked() else 'single',copy=self.copy.isChecked(),assign=self.assign.isChecked(),manual_mapping=self.manual_mapping.isChecked())
 
         def update_details(self,*_):
             a=self.selected()
@@ -1291,9 +1342,14 @@ if QtWidgets is not None:
             self.detail.setPlainText('\n'.join(lines))
 
         def mapping(self,sg,shape,keys):
-            options=['Keep original / skip']+list(keys)
-            text='Original material: '+str(sg or '(none)')+'\nMesh: '+str(shape)+'\nChoose the matching texture set.'
-            choice,ok=QtWidgets.QInputDialog.getItem(self,'Texture set assignment',text,options,0,False)
+            # Student default: no per-material dialog and no unsupported guess.
+            # Multiple surface-only materials still require choosing what to apply
+            # to the user's selected polygon; this is not FBX material ambiguity.
+            if sg!='Selected objects' and not self.manual_mapping.isChecked():return None
+            options=['Keep original (NOT preview verified)']+list(keys)
+            text=('元マテリアル: '+str(sg or '(none)')+'\nMesh: '+str(shape)+'\n'
+                  '対応するテクスチャセットを選択（不明なら Keep original）')
+            choice,ok=QtWidgets.QInputDialog.getItem(self,'Texture set assignment — Advanced',text,options,0,False)
             if not ok: raise UserCancelled('Import cancelled by user.')
             return None if choice==options[0] else choice
 
@@ -1318,6 +1374,7 @@ if QtWidgets is not None:
             try:
                 import_asset(a,settings,self.mapping,self.log)
                 self.log('Finished. Review warnings above.'); self.status.setText('Import finished: '+a.name)
+                mapping_summary(settings,self.log,self)
             except UserCancelled as e:self.log(str(e))
             except Exception as e:
                 self.log('ERROR: '+str(e)); self.log(traceback.format_exc()); QtWidgets.QMessageBox.warning(self,'Asset import failed',str(e)+'\nSee the import log for details.')
@@ -1916,7 +1973,7 @@ if QtWidgets is not None:
         def __init__(self,parent=None):
             self.native_ready=False
             super(NativeBrowser,self).__init__(parent)
-            self.setObjectName('PolyHavenAssetBrowserV51'); self.setWindowTitle('PolyHaven Asset Browser | 5.3.1')
+            self.setObjectName('PolyHavenAssetBrowserV51'); self.setWindowTitle('PolyHaven Asset Browser | 5.4')
             self.resize(1220,870)
             self.cache=Path(cmds.internalVar(userAppDir=True))/'NativeAssetBrowser'
             (self.cache/'PolyHaven').mkdir(parents=True,exist_ok=True)
@@ -2129,7 +2186,10 @@ if QtWidgets is not None:
                     if choice=='standin':s['standin']=True
             s['_parent']=self
             self._busy=True; self.import_btn.setEnabled(False)
-            try:import_asset(a,s,self.mapping,self.log); self.log('Import finished: '+a.name)
+            try:
+                import_asset(a,s,self.mapping,self.log)
+                self.log('Import finished: '+a.name)
+                mapping_summary(s,self.log,self)
             except SelectionRequiredError as e:self.log(str(e)); QtWidgets.QMessageBox.warning(self,'マテリアルアサイン先の確認',str(e))
             except Exception as e:self.log('IMPORT ERROR: '+str(e)); self.log(traceback.format_exc()); QtWidgets.QMessageBox.warning(self,'Import failed',str(e))
             finally:
