@@ -75,3 +75,13 @@ git push
 Python構文、ハッシュ、ZIP、ファイル置換、模擬Maya APIによる処理のテストを実施可能。実際のMaya 2027.2のUI動作、再起動後の保持、Mac環境およびGitHub接続は実機検証が必要。
 
 旧版の復旧手順とv1.0.8の検証条件はREADMEを参照。`saveShelf` の保存先は拡張子なしとする。
+
+
+## v1.0.12 — データ集合ツール（Data Collector）
+
+- 追加したファイル：`scripts/ntools/tools/data_collector.py`、`scripts/ntools/icons/collector.png`、`docs/tools/data_collector.md`。
+- シェルフ順序：**SF → PH → CITY → MAT → RIG → 集合！ → Separator → Help → Uninstall → Update**。
+- 旧版（1.0.11）からはUpdate後に本体が切り替わり、不足している集合ボタンを同期します。旧版からの初回更新ではアクティブなツールの終了が必要な場合があります。
+- 本ツールは、Maya標準・一部Arnold/USDキャッシュの既知ファイル属性のみを対象にします。 `.ass` や参照シーン内部の外部ファイルを再帰的に書き換えるものではありません。
+- 授業では、保存済みシーンのバックアップを確認してからコピー・再リンクしてください。実機検証の済んでいない機能は必ず小さなテストシーンで試してください。
+- Maya非依存のテスト：`python -m unittest discover -s tests -v`。Maya環境では、参照シーン、画像シーケンス、マルチドライブ、Unicodeファイル名、バックアップ、UDIMの個別試験を推奨。

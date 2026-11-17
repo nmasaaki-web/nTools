@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "nTools",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "tools": [
     {
       "id": "sketchfab",
@@ -53,18 +53,30 @@
       "icon": "quadruped.png",
       "description": "Four-legged guides, IK/FK and experimental retarget",
       "opens_on_import": true
+    },
+    {
+      "id": "collector",
+      "module": "data_collector",
+      "entry": "show",
+      "label": "Data Collector / データ集合ツール",
+      "short": "集合!",
+      "version": "1.0",
+      "icon": "collector.png",
+      "description": "Collect external textures, references, caches and Stand-in files into the active Maya project"
     }
   ],
   "files": {
-    "install.py": "e9eae34d7d4a933a1d1c6c2f0dfec75276570b06de5d7cc66a78c59047bd6639",
+    "install.py": "02350a46ff055b88eb18584113b806bf1b408df743c64e0f2bc444da055ae00f",
     "scripts/ntools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
+    "scripts/ntools/tools/data_collector.py": "7b40c605c03a24ce1927c3a0350b89179d37d10896e71576d547a74b12676fd3",
     "scripts/ntools/tools/material_creator.py": "36e16e108120600abddacec4a6415cb9ce408b78063720ca1542bb05bfcb00e1",
     "scripts/ntools/tools/maya_city_builder.py": "e3200ff543c3974aa14426ef6323570692b8bc0e5be414503ab9059d370db8b9",
     "scripts/ntools/tools/polyhaven_asset_browser.py": "ab13591e4d99d06591ee4d993adeca866b089b16f90ab4d62f8ca37de91c92fa",
     "scripts/ntools/tools/quadruped_quick_rig.py": "490401df593f436e22ba5f9abc269e135dc3ca45a9682687f93067daf04842c2",
     "scripts/ntools/tools/sketchfab_asset_browser.py": "689e0b947f597f82da660b2275fd1901650688f069a2f55b0130b33cbd524179",
     "scripts/ntools/icons/city.png": "12c0f8a7e70ab282a9db18768d41881c41eb36d24e3b76e6000aa30c46418cec",
+    "scripts/ntools/icons/collector.png": "1685ad66e73e1dd4da4a5e3e556bd57d629b6a34ce0002270d1d2848c593719e",
     "scripts/ntools/icons/help.png": "21af284d81387fecac3ab4226f9378c03e1a84dcbb090f717c5a849a379c8f5d",
     "scripts/ntools/icons/material.png": "b946aa685512079926ea59f118b86a66f7286c95265fb269ede5331fd1d9d50a",
     "scripts/ntools/icons/polyhaven.png": "309e91197d7430f498e01429da59d11324d995135c2f69bff392657066814156",

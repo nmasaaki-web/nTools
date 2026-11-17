@@ -25,7 +25,7 @@ SHELF = 'nTools'
 PACKAGE = 'ntools'
 MAX_BYTES = 32 * 1024 * 1024
 _RESTART_REQUIRED = False
-INSTALLER_VERSION = '1.0.11'
+INSTALLER_VERSION = '1.0.12'
 _SEPARATOR = '<ntools:shelf-separator>'
 _SHELF_SAVE_PENDING = False
 _UPDATE_BUSY = False
@@ -355,12 +355,11 @@ def _tool_button(t):
 
 
 def _sync_management_buttons(m):
-    """Migrate the known four-tool layout to five tools plus management.
+    """Add known new tool buttons without deleting or recreating the shelf.
 
-    Only City Builder and missing management controls may be inserted.
-    Never delete/rebuild the shelf or move the four original tool buttons.
-    A partial insertion (e.g. City appended before move) is retryable.
-    Unknown, duplicate, missing original or reordered original controls stop.
+    Migrates the original four-tool layout, optional City Builder and optional
+    Data Collector to the current six-tool layout. Unknown controls stop the
+    migration. Existing tool commands and the rest of Maya UI are untouched.
     """
     global _SHELF_SAVE_PENDING
     cmds, _ = _maya()
@@ -372,26 +371,25 @@ def _sync_management_buttons(m):
         raise RuntimeError('管理対象外の項目があります。シェルフは変更しません。')
     tools = m['tools']
     ids = [t['id'] for t in tools]
-    if ids != ['sketchfab','polyhaven','city','material','quadruped']:
+    if ids != ['sketchfab','polyhaven','city','material','quadruped','collector']:
         raise RuntimeError('未対応のツール構成です。シェルフは変更しません。')
     expected = [_tool_button(t)['command'].strip() for t in tools]
-    city = expected[2]
-    original = [c for c in expected if c != city]
+    optional = {expected[2],expected[5]}  # City and Collector were added later.
+    original = [expected[i] for i in (0,1,3,4)]
     kinds = ('help','uninstall','update')
-    command_for = {k: _management_button(k)['command'].strip() for k in kinds}
+    command_for = {k:_management_button(k)['command'].strip() for k in kinds}
     desired = [k for k in kinds if 'scripts/ntools/icons/'+k+'.png' in m['files']]
-    if 'update' not in desired: raise RuntimeError('Update icon is missing from manifest.')
-    target_tail = [_SEPARATOR] + [command_for[k] for k in desired]
-    goal = expected + target_tail
+    if 'update' not in desired:
+        raise RuntimeError('Update icon is missing from manifest.')
+    target_tail = [_SEPARATOR]+[command_for[k] for k in desired]
+    goal = expected+target_tail
     items = [_shelf_item(p) for p in _button_paths(shelf)]
-    # Ignore City while testing the legacy prefix. City may be appended if
-    # a previous position call failed. Do not accept custom/duplicate controls.
-    legacy = [c for c in items if c != city]
+    legacy = [item for item in items if item not in optional]
     tail = legacy[len(original):]
-    if (len(items) != len(set(items)) or legacy[:len(original)] != original
-            or not set(tail) <= set(target_tail) or command_for['update'] not in tail):
+    if (len(items)!=len(set(items)) or legacy[:len(original)]!=original
+            or not set(tail)<=set(target_tail) or command_for['update'] not in tail):
         raise RuntimeError('既知のnTools構成と一致しません。シェルフは変更しません。')
-    if items == goal and not _SHELF_SAVE_PENDING:
+    if items==goal and not _SHELF_SAVE_PENDING:
         return 'シェルフ：最新のボタン構成です。'
     for t in tools:
         if not (_target()/'icons'/t['icon']).is_file():
@@ -399,43 +397,49 @@ def _sync_management_buttons(m):
     for kind in desired:
         if not (_target()/'icons'/(kind+'.png')).is_file():
             raise RuntimeError('Missing icon: '+kind)
-    backup = _backup_ui()
-    parent = cmds.setParent(q=True)
-    added = []
-    def move_to(wanted, index):
-        current = _button_paths(shelf)
-        actual = [_shelf_item(p) for p in current]
-        if actual[index-1] != wanted:
-            p = current[actual.index(wanted)]
-            cmds.shelfLayout(shelf,e=True,position=(p.split('|')[-1],index))
+    backup=_backup_ui()
+    parent=cmds.setParent(q=True)
+    added=[]
+    def move_to(wanted,index):
+        current=_button_paths(shelf)
+        actual=[_shelf_item(p) for p in current]
+        if actual[index-1]!=wanted:
+            item=current[actual.index(wanted)]
+            cmds.shelfLayout(shelf,e=True,position=(item.split('|')[-1],index))
     try:
-        _SHELF_SAVE_PENDING = True
-        if city not in items:
-            cmds.shelfButton(parent=shelf, **_tool_button(tools[2]))
-            added.append('City Builder')
+        _SHELF_SAVE_PENDING=True
+        for idx in (2,5):
+            t=tools[idx]
+            command=expected[idx]
+            if command not in items:
+                cmds.shelfButton(parent=shelf,**_tool_button(t))
+                added.append(t['label'])
         if _SEPARATOR not in items:
             _new_separator(shelf)
             added.append('Separator')
         for kind in desired:
             if command_for[kind] not in items:
-                cmds.shelfButton(parent=shelf, **_management_button(kind))
+                cmds.shelfButton(parent=shelf,**_management_button(kind))
                 added.append(kind.title())
-        # The four old tool controls retain their relative order and commands.
-        move_to(city, 3)
-        for index, wanted in enumerate(target_tail, len(expected)+1):
-            move_to(wanted, index)
-        actual = [_shelf_item(p) for p in _button_paths(shelf)]
-        if actual != goal: raise RuntimeError('シェルフの項目順序が一致しません。')
-        if _ui_snapshot()!=before: raise RuntimeError('Mayaのメニュー状態が変化しました。')
+        # Restore the full known sequence; Maya does the minimal moves.
+        for idx,wanted in enumerate(goal,1):
+            move_to(wanted,idx)
+        actual=[_shelf_item(p) for p in _button_paths(shelf)]
+        if actual!=goal:
+            raise RuntimeError('シェルフの項目順序が一致しません。')
+        if _ui_snapshot()!=before:
+            raise RuntimeError('Mayaのメニュー状態が変化しました。')
         _save_ntools_shelf()
-        if _ui_snapshot()!=before: raise RuntimeError('Mayaのメニュー状態が変化しました。')
-        _SHELF_SAVE_PENDING = False
+        if _ui_snapshot()!=before:
+            raise RuntimeError('Mayaのメニュー状態が変化しました。')
+        _SHELF_SAVE_PENDING=False
     except Exception as exc:
-        raise RuntimeError(str(exc)+'\nシェルフ操作を中止しました。バックアップ：'+str(backup)+'\nUIが正常ならUpdateで再試行できます。') from exc
+        raise RuntimeError(str(exc)+'\nシェルフ操作を中止しました。バックアップ：'+str(backup)
+                           +'\nUIが正常ならUpdateで再試行できます。') from exc
     finally:
         if parent:
-            try: cmds.setParent(parent)
-            except RuntimeError: pass
+            try:cmds.setParent(parent)
+            except RuntimeError:pass
     return 'シェルフ：'+(' / '.join(added)+' を追加しました。' if added else '項目の順序・保存を確認しました。')
 
 
@@ -727,6 +731,10 @@ def _hot_update_blockers(changed):
                                            or _executor_busy(getattr(obj, 'pool', None))
                                            or _executor_busy(getattr(obj, 'thumb_pool', None))):
                     blockers.append('PolyHaven: ダウンロード・検索の終了を待ってください')
+                continue
+            if short == 'data_collector':
+                if cmds.window('nToolsDataCollectorWindow', exists=True):
+                    blockers.append('データ集合ツール: ウィンドウを閉じてください')
                 continue
             if short == 'material_creator':
                 obj = getattr(module, '_WINDOW', None)
