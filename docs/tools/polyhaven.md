@@ -1,4 +1,4 @@
-# PolyHaven Asset Browser v5.4
+# PolyHaven Asset Browser v5.4.2
 
 [← nTools トップへ戻る](../../README.md)
 
@@ -19,6 +19,12 @@ Poly Havenのモデル、植物、サーフェス、HDRIをMayaから検索・�
 ## 1. 準備
 
 Mayaで **File → Set Project** を実行し、シーンを保存します。Arnold / OpenPBRが使用できる環境で、nToolsシェルフの **PH** を押します。オンライン機能にはインターネット接続が必要です。Poly Havenの公開APIを使用し、個人APIトークンの入力はありません。
+
+## 検索欄の使い方（v5.4.2）
+
+検索欄は**各タブの直下に1つだけ**です。`Local Library`、`Poly Haven Assets`、`Poly Haven HDRIs` の切り替え後も、入力した `tree` / `wood` / `sunset` などの文字は維持されます。検索欄右端の×で文字をクリアできます。
+
+同じ行にあるカテゴリフィルターでは、`All` / `3D Models` / `Plants` / `Surfaces` を選択できます。HDRIタブではHDRIしか表示されないため、カテゴリは一時的に非表示になります。オンラインでカタログが読み込めないときは `Refresh API` を試してください。ローカルファイルを追加した場合は上部の `Refresh` を押します。
 
 ## 2. モデル・植物を読み込む
 
@@ -69,7 +75,7 @@ Mayaで **File → Set Project** を実行し、シーンを保存します。Ar
 | Normal convention | Auto (file name)。必要に応じOpenGL / DirectX。 |
 | Enable Displacement | OFF。高さ、Height midpoint、Subdiv iterationsを調整。 |
 | Import as Arnold Stand-in | OFF。対応モデルをArnoldのASSに書き出してスタンドイン化する。 |
-| Separate independent trees / groups into ASS | ON。独立グループが明確ならASSを個別書き出し。不明な場合は1つにまとめる。 |
+| Separate independent trees / groups into ASS | **OFF（推奨）**。必要なときだけONにして、独立したFBXグループを別々のASSにする。選択変更・インポート後にOFFへ戻る。 |
 | Copy textures to Maya project | ON。テクスチャをプロジェクト内へコピーする。 |
 | Surfaces: assign to selection | ON。サーフェス素材を選択メッシュに割り当てる。 |
 
@@ -94,12 +100,12 @@ Mayaで **File → Set Project** を実行し、シーンを保存します。Ar
 
 ### 複数の木を個別ASSへ
 
-`Import as Arnold Stand-in` がONの場合は、初期ONの `Separate independent trees / groups into ASS` を利用できます。
+`Import as Arnold Stand-in` がONで、さらに木や複数グループを個別のASSにしたい場合だけ `Separate independent trees / groups into ASS` をONにしてください。**初期値はOFF**です。
 
 - FBX内で木がそれぞれ**独立したオブジェクトグループ**に分かれており、グループ間の水平範囲が十分に離れていれば、グループごとに `.ass` を書き出し、個々の `aiStandIn` を生成します。ルートグループにまとまり、Outlinerで個別に移動できます。
 - スタンドインのローカル原点は原則として各グループのバウンディングボックスの**底面中央**に配置します。各木を移動・MASHインスタンス化するための起点に利用できます。
 - ツリーの**幹・枝・葉が別のグループ**になっていたり、複数の木が**単一メッシュに結合**されていたりして、木ごとの単位を安全に判定できない場合は、誤ったASSを作らず**1つにまとめます**。必ずしも画像に見える木の本数とASSの個数が一致するわけではありません。
-- 自動分割を使いたくない場合は `Separate independent trees / groups into ASS` をOFFにします。1つのASSにまとめて書き出します。
+- 自動分割を使いたくない場合は初期値のOFFのままで構いません。1つのASSにまとめて書き出します。別のアセットを選択した際やインポート開始後は再びOFFになります。
 
 ASS書き出しが失敗した場合は、編集可能な元メッシュを保持し、作成途中のプロキシとASSを可能な範囲で除去します。複数のASS化は**Arnold標準の選択書き出し**を使用しています。複数プロキシのシェーダ・配置・表示と、MASHへの登録はMaya 2027実機で必ず確認してください。
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PolyHaven Asset Browser v5.4.
+"""PolyHaven Asset Browser v5.4.2.
 Paste into Maya Python Script Editor, or import polyhaven_asset_browser; call show().
 Poly Haven public API, local library, OpenPBR and Arnold. No Fab UI.
 """
@@ -32,7 +32,7 @@ except ImportError:
     except ImportError:
         QtCore = QtGui = QtWidgets = wrapInstance = None
 
-VERSION = '5.4'
+VERSION = '5.4.2'
 MESH_EXT = {'.fbx', '.obj'}
 IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.exr', '.tga', '.bmp', '.tx', '.hdr', '.webp'}
 SKIP_DIRS = {'.git', '__pycache__', 'node_modules', 'maya_asset_browser', 'standins', 'sourceimages'}
@@ -1176,7 +1176,7 @@ if QtWidgets is not None:
             v.addLayout(rootrow)
             filters=QtWidgets.QHBoxLayout(); self.search=QtWidgets.QLineEdit(); self.search.setPlaceholderText('Search name / source / folder…'); self.search.textChanged.connect(self.rebuild)
             self.category=QtWidgets.QComboBox(); self.category.addItems(['All','3D','Surfaces','Plants']); self.category.currentIndexChanged.connect(self.rebuild)
-            filters.addWidget(self.search,1); filters.addWidget(self.category); v.addLayout(filters)
+            filters.addWidget(self.search,1); filters.addWidget(self.category); v.addLayout(filters); self._base_filter_row=filters
             splitter=QtWidgets.QSplitter(QtCore.Qt.Horizontal); v.addWidget(splitter,1)
             self.list=QtWidgets.QListWidget(); self.list.setViewMode(QtWidgets.QListView.IconMode); self.list.setResizeMode(QtWidgets.QListView.Adjust); self.list.setMovement(QtWidgets.QListView.Static); self.list.setIconSize(QtCore.QSize(132,108)); self.list.setGridSize(QtCore.QSize(162,155)); self.list.setWordWrap(True); self.list.setSpacing(3); self.list.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
             self.list.currentItemChanged.connect(self.on_selected); self.list.itemDoubleClicked.connect(lambda _item:self.run_import())
@@ -1194,7 +1194,7 @@ if QtWidgets is not None:
             self.mid=QtWidgets.QDoubleSpinBox(); self.mid.setRange(-10000,10000); self.mid.setDecimals(3); self.mid.setSingleStep(0.1); self.mid.setValue(0.5); form.addRow('Height midpoint',self.mid)
             self.subdiv=QtWidgets.QSpinBox(); self.subdiv.setRange(0,5); self.subdiv.setValue(2); form.addRow('Subdiv iterations',self.subdiv)
             self.proxy=QtWidgets.QCheckBox('Import as Arnold Stand-in'); self.proxy.setChecked(False); self.proxy.setToolTip('1回限りの設定です。インポート開始後に自動でOFFへ戻ります。\n警告でStand-inを選んでも、次のアセットには引き継ぎません。'); form.addRow(self.proxy)
-            self.split_standin=QtWidgets.QCheckBox('Separate independent trees / groups into ASS'); self.split_standin.setChecked(True); self.split_standin.setToolTip('Automatically separate clearly distinct FBX groups.\nIf the FBX is flattened or its groups overlap, one ASS is exported to avoid splitting branches from leaves.'); form.addRow(self.split_standin)
+            self.split_standin=QtWidgets.QCheckBox('Separate independent trees / groups into ASS'); self.split_standin.setChecked(False); self.split_standin.setToolTip('初期値OFF。必要なアセットでのみONにしてください。\nASS読み込み時に限り、明確に独立したFBXグループを別々に書き出します。\n選択アセットの切り替えやインポート開始後にOFFへ戻ります。'); form.addRow(self.split_standin)
             self.copy=QtWidgets.QCheckBox('Copy textures to Maya project'); self.copy.setChecked(True); form.addRow(self.copy)
             self.assign=QtWidgets.QCheckBox('Surfaces: assign to selection'); self.assign.setChecked(True); form.addRow(self.assign)
             self.manual_mapping=QtWidgets.QCheckBox('Advanced: Ask for ambiguous materials')
@@ -1300,6 +1300,7 @@ if QtWidgets is not None:
             if key is None or key==self._standin_selection_key:return
             self._standin_selection_key=key
             self.proxy.setChecked(False)
+            self.split_standin.setChecked(False)
 
         def on_selected(self,*_):
             a=self.selected()
@@ -1381,6 +1382,7 @@ if QtWidgets is not None:
             finally:
                 self._busy=False
                 self.proxy.setChecked(False)  # Stand-in is one-shot, even for manual checkbox use.
+                self.split_standin.setChecked(False)  # One-shot split preference; avoid affecting the next import.
                 self.import_btn.setEnabled(self.selected() is not None)
 
 
@@ -1973,7 +1975,7 @@ if QtWidgets is not None:
         def __init__(self,parent=None):
             self.native_ready=False
             super(NativeBrowser,self).__init__(parent)
-            self.setObjectName('PolyHavenAssetBrowserV51'); self.setWindowTitle('PolyHaven Asset Browser | 5.4')
+            self.setObjectName('PolyHavenAssetBrowserV51'); self.setWindowTitle('PolyHaven Asset Browser | '+VERSION)
             self.resize(1220,870)
             self.cache=Path(cmds.internalVar(userAppDir=True))/'NativeAssetBrowser'
             (self.cache/'PolyHaven').mkdir(parents=True,exist_ok=True)
@@ -1997,13 +1999,17 @@ if QtWidgets is not None:
             button(row,'Repair Texture Paths',self.repair_paths)
             button(row,'Open Cache',lambda:QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(self.cache/'PolyHaven'))))
             row.addStretch(1); v.insertLayout(2,row)
+            # Native browser has one search row inside the active tab. Keep the
+            # base class widgets hidden (but available to Local Library filtering).
+            self.search.hide(); self.category.hide()
+            v.removeItem(self._base_filter_row)
             # Keep original local library and existing import settings; switch only the list pane.
-            splitter=self.list.parentWidget(); self.tabs=QtWidgets.QTabWidget(); self.local_page=QtWidgets.QWidget(); local=QtWidgets.QVBoxLayout(self.local_page); local.setContentsMargins(0,0,0,0)
+            splitter=self.list.parentWidget(); self.tabs=QtWidgets.QTabWidget(); self.local_page=QtWidgets.QWidget(); local=QtWidgets.QVBoxLayout(self.local_page); self.local_layout=local; local.setContentsMargins(0,0,0,0)
             self.list.setParent(self.local_page); local.addWidget(self.list); self.tabs.addTab(self.local_page,'Local Library')
-            self.online_page=QtWidgets.QWidget(); self.online_layout=QtWidgets.QVBoxLayout(self.online_page); self.online_layout.setContentsMargins(0,0,0,0); self.online_content=QtWidgets.QWidget(); ol=QtWidgets.QVBoxLayout(self.online_content); ol.setContentsMargins(3,3,3,3); self.online_layout.addWidget(self.online_content)
-            r=QtWidgets.QHBoxLayout(); self.ph_search=QtWidgets.QLineEdit(); self.ph_search.setPlaceholderText('Search name, tags, categories…'); r.addWidget(self.ph_search,1)
+            self.online_page=QtWidgets.QWidget(); self.online_layout=QtWidgets.QVBoxLayout(self.online_page); self.online_layout.setContentsMargins(0,0,0,0); self.online_content=QtWidgets.QWidget(); ol=QtWidgets.QVBoxLayout(self.online_content); self.online_content_layout=ol; ol.setContentsMargins(3,3,3,3); self.online_layout.addWidget(self.online_content)
+            self.search_bar=QtWidgets.QWidget(); r=QtWidgets.QHBoxLayout(self.search_bar); r.setContentsMargins(0,0,0,0); self.ph_search=QtWidgets.QLineEdit(); self.ph_search.setPlaceholderText('Search local assets, models, surfaces or HDRIs…'); r.addWidget(self.ph_search,1)
             self.ph_kind=QtWidgets.QComboBox(); self.ph_kind.addItems(['All','3D Models','Plants','Surfaces']); r.addWidget(self.ph_kind)
-            button(r,'Refresh API',lambda:self.load_catalog(True)); ol.addLayout(r)
+            self.refresh_api_btn=button(r,'Refresh API',lambda:self.load_catalog(True)); ol.addWidget(self.search_bar)
             self.ph_list=QtWidgets.QListWidget(); self.ph_list.setViewMode(QtWidgets.QListView.IconMode); self.ph_list.setResizeMode(QtWidgets.QListView.Adjust); self.ph_list.setMovement(QtWidgets.QListView.Static); self.ph_list.setWordWrap(True); self.ph_list.setIconSize(QtCore.QSize(132,108)); self.ph_list.setGridSize(QtCore.QSize(162,155)); self.ph_list.setSpacing(3); ol.addWidget(self.ph_list,1)
             r=QtWidgets.QHBoxLayout(); self.prev_btn=button(r,'Previous',lambda:self.change_page(-1)); self.page_label=QtWidgets.QLabel('Not loaded'); r.addWidget(self.page_label,1); self.next_btn=button(r,'Next',lambda:self.change_page(1)); ol.addLayout(r)
             r=QtWidgets.QHBoxLayout(); self.cache_btn=button(r,'Download only',lambda:self.start_poly(False)); button(r,'Open asset page',self.open_poly_page); self.cancel_btn=button(r,'Cancel download',self.cancel_download); self.cancel_btn.setEnabled(False); ol.addLayout(r)
@@ -2018,16 +2024,78 @@ if QtWidgets is not None:
             b=QtWidgets.QPushButton('Import local EXR / HDR…'); b.clicked.connect(self.pick_local_hdri); hf.addRow(b)
             panel=self.detail.parentWidget().layout(); panel.insertWidget(panel.indexOf(self.detail),self.hdri_controls); self.hdri_controls.hide()
             self.hdri_res.currentIndexChanged.connect(self.update_details)
-            self.ph_search.textChanged.connect(self.reset_page); self.ph_kind.currentIndexChanged.connect(self.reset_page); self.ph_list.currentItemChanged.connect(self.on_selected); self.ph_list.itemDoubleClicked.connect(lambda _:self.run_import())
+            # One visible search/category pair for all three tabs. The original
+            # base-class fields remain hidden to preserve Local Library filtering.
+            self.ph_search.setClearButtonEnabled(True)
+            self.ph_search.textChanged.connect(self._shared_search_changed)
+            self.ph_kind.currentIndexChanged.connect(self._shared_category_changed)
+            self.ph_list.currentItemChanged.connect(self.on_selected)
+            self.ph_list.itemDoubleClicked.connect(lambda _:self.run_import())
+            self._quiet_text(self.ph_search,self.search.text())
+            self._quiet_choice(self.ph_kind,self._online_category(self.category.currentText()))
+
+        @staticmethod
+        def _quiet_text(widget, text):
+            if widget.text()==text:return
+            was_blocked=widget.blockSignals(True)
+            try:widget.setText(text)
+            finally:widget.blockSignals(was_blocked)
+
+        @staticmethod
+        def _quiet_choice(widget, value):
+            if widget.currentText()==value:return
+            index=widget.findText(value)
+            if index<0:return
+            was_blocked=widget.blockSignals(True)
+            try:widget.setCurrentIndex(index)
+            finally:widget.blockSignals(was_blocked)
+
+        @staticmethod
+        def _online_category(value):
+            return {'3D':'3D Models'}.get(value,value)
+
+        @staticmethod
+        def _local_category(value):
+            return {'3D Models':'3D'}.get(value,value)
+
+        def _shared_search_changed(self, text):
+            self._quiet_text(self.search,text)
+            if self.online():self.reset_page()
+            else:self.rebuild()
+
+        def _shared_category_changed(self, *_):
+            self._quiet_choice(self.category,self._local_category(self.ph_kind.currentText()))
+            if self.online():
+                if not self.hdri_mode():self.reset_page()
+            else:self.rebuild()
+
+        def _move_search_bar(self, layout):
+            # Reparent just the one search row rather than creating duplicate
+            # QLineEdits. Search remains directly beneath the active tab bar.
+            old=self.search_bar.parentWidget()
+            if old is not None and old.layout() is not None:
+                old.layout().removeWidget(self.search_bar)
+            layout.insertWidget(0,self.search_bar)
+            self.search_bar.show()  # Reparenting a QWidget can hide it until shown explicitly.
 
         def online(self):return self.native_ready and self.tabs.currentIndex() in (1,2)
         def hdri_mode(self):return self.native_ready and self.tabs.currentIndex()==2
         def source_changed(self,*_):
+            # Keep the one search row immediately under whichever tab is active.
+            # The term is preserved across Local / Assets / HDRIs.
             if self.online():
                 layout=self.hdri_layout if self.hdri_mode() else self.online_layout
                 layout.addWidget(self.online_content); self.online_content.show()
-                self.ph_kind.setVisible(not self.hdri_mode()); self.page=0; self.rebuild_online()
+                self._move_search_bar(self.online_content_layout)
+                self.ph_kind.setVisible(not self.hdri_mode())
+                self.refresh_api_btn.setVisible(True)
+                self.page=0; self.rebuild_online()
                 if not self.catalog and self.catalog_job is None:self.load_catalog(False)
+            else:
+                self._move_search_bar(self.local_layout)
+                self.ph_kind.setVisible(True)
+                self.refresh_api_btn.setVisible(False) # Local: use the existing Refresh button.
+                self.rebuild()
             self.on_selected()
 
         def repair_paths(self):
@@ -2141,6 +2209,7 @@ if QtWidgets is not None:
                     super(NativeBrowser,self).run_import()
                 else:
                     self.proxy.setChecked(False)
+                    self.split_standin.setChecked(False)
 
         def snapshot_settings(self):
             s=self.settings(); s['family']=None
@@ -2170,6 +2239,7 @@ if QtWidgets is not None:
                 self.jobs.append(('hdri',self.pool.submit(ph_acquire_hdri,slug,self.catalog[slug],s['hdri_res'],self.cache,self.cancel,self.messages.put),s,auto))
             else:self.jobs.append(('poly',self.pool.submit(ph_acquire,slug,self.catalog[slug],s['resolution'],s['lod'],self.cache,self.cancel,self.messages.put),s,auto))
             self.proxy.setChecked(False)  # Queue captured its settings; next asset defaults to editable.
+            self.split_standin.setChecked(False)  # Do not carry split-ASS into the next asset.
             self.cancel_btn.setEnabled(True); self.on_selected(); self.log('Queued Poly Haven: '+slug)
 
         def cancel_download(self):self.cancel.set(); self.log('Cancel requested; partial download will be discarded.')
@@ -2195,6 +2265,7 @@ if QtWidgets is not None:
             finally:
                 self._busy=False
                 self.proxy.setChecked(False)
+                self.split_standin.setChecked(False)
                 self.on_selected()
         def tick_native(self):
             if self.closing or self._busy:return
