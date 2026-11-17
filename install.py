@@ -25,7 +25,7 @@ SHELF = 'nTools'
 PACKAGE = 'ntools'
 MAX_BYTES = 32 * 1024 * 1024
 _RESTART_REQUIRED = False
-INSTALLER_VERSION = '1.0.12'
+INSTALLER_VERSION = '1.0.21'
 _SEPARATOR = '<ntools:shelf-separator>'
 _SHELF_SAVE_PENDING = False
 _UPDATE_BUSY = False
@@ -389,7 +389,17 @@ def _sync_management_buttons(m):
     if (len(items)!=len(set(items)) or legacy[:len(original)]!=original
             or not set(tail)<=set(target_tail) or command_for['update'] not in tail):
         raise RuntimeError('既知のnTools構成と一致しません。シェルフは変更しません。')
-    if items==goal and not _SHELF_SAVE_PENDING:
+    # Image paths are not part of the shelf command signature. Older versions
+    # may have the correct buttons but still point to the old, text-bearing
+    # collector.png icon. Update this one button only, never rebuild the shelf.
+    collector_icon=(_target()/'icons'/tools[5]['icon']).as_posix()
+    collector_button=None
+    icon_outdated=False
+    if expected[5] in items:
+        collector_button=_button_paths(shelf)[items.index(expected[5])]
+        previous_icon=cmds.shelfButton(collector_button,q=True,image1=True) or ''
+        icon_outdated=(str(previous_icon).replace('\\','/') != collector_icon)
+    if items==goal and not _SHELF_SAVE_PENDING and not icon_outdated:
         return 'シェルフ：最新のボタン構成です。'
     for t in tools:
         if not (_target()/'icons'/t['icon']).is_file():
@@ -427,6 +437,15 @@ def _sync_management_buttons(m):
         actual=[_shelf_item(p) for p in _button_paths(shelf)]
         if actual!=goal:
             raise RuntimeError('シェルフの項目順序が一致しません。')
+        # Resolve the current control again after Maya has moved buttons.
+        if icon_outdated:
+            current=_button_paths(shelf)
+            collector_button=current[actual.index(expected[5])]
+            cmds.shelfButton(collector_button,e=True,image1=collector_icon)
+            applied=cmds.shelfButton(collector_button,q=True,image1=True) or ''
+            if str(applied).replace('\\','/') != collector_icon:
+                raise RuntimeError('集合ツールのアイコン更新に失敗しました。')
+            added.append('集合アイコン更新')
         if _ui_snapshot()!=before:
             raise RuntimeError('Mayaのメニュー状態が変化しました。')
         _save_ntools_shelf()

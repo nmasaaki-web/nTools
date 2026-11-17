@@ -13,11 +13,13 @@ manager=importlib.util.module_from_spec(spec);spec.loader.exec_module(manager)
 
 class Cmds:
     def __init__(self,items):
-        self.entries=[];self.n=0
+        self.entries=[];self.n=0;self.icons={};self.icon_edits=[]
         for item in items:self.add(item)
     def add(self,item):
         self.n+=1
-        self.entries.append(('obj'+str(self.n),item))
+        name='obj'+str(self.n)
+        self.entries.append((name,item))
+        self.icons[name]='collector.png' if 'nt.launch(\'collector\')' in item else 'other.png'
     def shelfLayout(self,element,**kw):
         if kw.get('exists'):return True
         if kw.get('e'):
@@ -27,7 +29,15 @@ class Cmds:
             val=self.entries.pop(old);self.entries.insert(position-1,val)
             return
         raise AssertionError(kw)
-    def shelfButton(self,**kwargs):self.add(kwargs['command'].strip())
+    def shelfButton(self,path=None,**kwargs):
+        if kwargs.get('q'):return self.icons[path.rsplit('|',1)[-1]]
+        if kwargs.get('e'):
+            name=path.rsplit('|',1)[-1]
+            self.icons[name]=kwargs['image1']
+            self.icon_edits.append((name,kwargs['image1']))
+            return
+        self.add(kwargs['command'].strip())
+        self.icons[self.entries[-1][0]]=kwargs.get('image1','other.png')
     def setParent(self,where=None,**kw):return 'root' if kw.get('q') else None
 
 class ShelfTests(unittest.TestCase):
@@ -39,8 +49,12 @@ class ShelfTests(unittest.TestCase):
             expected=[manager._tool_button(t)['command'].strip() for t in self.manifest['tools']]
             tail=[manager._SEPARATOR]+[manager._management_button(k)['command'].strip() for k in ('help','uninstall','update')]
         return expected,tail
-    def execute(self,items,fail=False):
+    def execute(self,items,fail=False,current_icon=False):
         fake=Cmds(items)
+        if current_icon:
+            for name,item in fake.entries:
+                if 'nt.launch(\'collector\')' in item:
+                    fake.icons[name]=(ROOT/'scripts/ntools/icons/collector_whistle.png').as_posix()
         def paths(shelf):return [shelf+'|'+name for name,_ in fake.entries]
         def item(path):return next(value for name,value in fake.entries if name==path.rsplit('|',1)[-1])
         saved=[]
@@ -55,23 +69,33 @@ class ShelfTests(unittest.TestCase):
               mock.patch.object(manager,'_new_separator',side_effect=lambda shelf:fake.add(manager._SEPARATOR)),
               mock.patch.object(manager,'_save_ntools_shelf',side_effect=lambda:saved.append(True))):
             message=manager._sync_management_buttons(self.manifest)
-        return [value for _,value in fake.entries],message,saved
+        return [value for _,value in fake.entries],message,saved,fake.icon_edits
     def test_migrate_five_tools_to_six(self):
         expected,tail=self.signatures()
-        migrated,message,saved=self.execute(expected[:5]+tail)
+        migrated,message,saved,edits=self.execute(expected[:5]+tail)
         self.assertEqual(migrated,expected+tail)
         self.assertIn('Data Collector',message)
         self.assertEqual(saved,[True])
     def test_migrate_original_four_tools_to_six(self):
         expected,tail=self.signatures()
-        migrated,message,saved=self.execute([expected[i] for i in (0,1,3,4)]+tail[1:])
+        migrated,message,saved,edits=self.execute([expected[i] for i in (0,1,3,4)]+tail[1:])
         self.assertEqual(migrated,expected+tail)
         self.assertEqual(len(saved),1)
     def test_up_to_date_shelf_is_unchanged(self):
         expected,tail=self.signatures()
-        migrated,message,saved=self.execute(expected+tail)
+        migrated,message,saved,edits=self.execute(expected+tail, current_icon=True)
         self.assertEqual(migrated,expected+tail)
         self.assertEqual(saved,[])
+        self.assertEqual(edits,[])
+    def test_refresh_collector_icon_without_rebuilding(self):
+        expected,tail=self.signatures()
+        migrated,message,saved,edits=self.execute(expected+tail)
+        self.assertEqual(migrated,expected+tail)
+        self.assertEqual(len(edits),1)
+        self.assertTrue(edits[0][1].endswith('collector_whistle.png'))
+        self.assertEqual(saved,[True])
+        self.assertIn('集合アイコン更新',message)
+
     def test_unknown_shelf_item_rejected(self):
         expected,tail=self.signatures()
         fake=Cmds(expected[:5]+['cmds.deleteUI("MayaWindow")']+tail)

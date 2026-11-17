@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PolyHaven Asset Browser v5.4.4.
+"""PolyHaven Asset Browser v5.4.5.
 Paste into Maya Python Script Editor, or import polyhaven_asset_browser; call show().
 Poly Haven public API, local library, OpenPBR and Arnold. No Fab UI.
 """
@@ -32,7 +32,7 @@ except ImportError:
     except ImportError:
         QtCore = QtGui = QtWidgets = wrapInstance = None
 
-VERSION = '5.4.4'
+VERSION = '5.4.5'
 MESH_EXT = {'.fbx', '.obj'}
 IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.exr', '.tga', '.bmp', '.tx', '.hdr', '.webp'}
 SKIP_DIRS = {'.git', '__pycache__', 'node_modules', 'maya_asset_browser', 'standins', 'sourceimages'}
@@ -817,7 +817,7 @@ def unresolved_standin_decision(parent,asset,unresolved,suggestions):
     detail+='「現状のままASS化」は未確定マテリアルを残します。外観は保証されません。'
     box.setInformativeText(detail)
     original=box.addButton('現状のままASS化（外観未確認）',QtWidgets.QMessageBox.ActionRole)
-    editable=box.addButton('編集可能メッシュで保持（推奨）',QtWidgets.QMessageBox.ActionRole)
+    editable=box.addButton('編集可能メッシュで保持',QtWidgets.QMessageBox.ActionRole)
     cancel=box.addButton('取り込みをキャンセル',QtWidgets.QMessageBox.RejectRole)
     box.setDefaultButton(editable)
     box.exec() if hasattr(box,'exec') else box.exec_()
