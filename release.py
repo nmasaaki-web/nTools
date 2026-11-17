@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintainer: python release.py 1.0.14 (outside Maya)."""
+"""Maintainer: python release.py 1.0.15 (outside Maya)."""
 import hashlib
 import json
 from pathlib import Path
@@ -9,7 +9,7 @@ import sys
 ROOT=Path(__file__).resolve().parent
 TOOLS=[
     dict(id='sketchfab',module='sketchfab_asset_browser',entry='show',label='Sketchfab Asset Browser',short='SF',version='1.3',icon='sketchfab.png',description='Static glTF asset import; OpenPBR including Specular-Glossiness conversion'),
-    dict(id='polyhaven',module='polyhaven_asset_browser',entry='show',label='PolyHaven Asset Browser',short='PH',version='5.3',icon='polyhaven.png',description='Poly Haven assets, heavy-model warning, separate Arnold ASS per independent tree group'),
+    dict(id='polyhaven',module='polyhaven_asset_browser',entry='show',label='PolyHaven Asset Browser',short='PH',version='5.3.1',icon='polyhaven.png',description='Poly Haven assets, heavy-model warning, per-import Stand-in choice, separate Arnold ASS per tree group'),
     dict(id='city',module='maya_city_builder',entry='show',label='Maya City Builder',short='CITY',version='2.4.1',icon='city.png',description='OSM, PLATEAU, Procedural and Procedural Japan city geometry'),
     dict(id='material',module='material_creator',entry='show',label='Material Creator',short='MAT',version='1.3',icon='material.png',description='Create OpenPBR materials from local textures or JSON'),
     dict(id='quadruped',module='quadruped_quick_rig',entry='show_ui',label='Quadruped Quick Rig',short='RIG',version='2.4.0',icon='quadruped.png',description='Four-legged guides, IK/FK and experimental retarget',opens_on_import=True),

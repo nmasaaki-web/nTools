@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PolyHaven Asset Browser v5.3.
+"""PolyHaven Asset Browser v5.3.1.
 Paste into Maya Python Script Editor, or import polyhaven_asset_browser; call show().
 Poly Haven public API, local library, OpenPBR and Arnold. No Fab UI.
 """
@@ -32,7 +32,7 @@ except ImportError:
     except ImportError:
         QtCore = QtGui = QtWidgets = wrapInstance = None
 
-VERSION = '5.3'
+VERSION = '5.3.1'
 MESH_EXT = {'.fbx', '.obj'}
 IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.exr', '.tga', '.bmp', '.tx', '.hdr', '.webp'}
 SKIP_DIRS = {'.git', '__pycache__', 'node_modules', 'maya_asset_browser', 'standins', 'sourceimages'}
@@ -1115,7 +1115,7 @@ if QtWidgets is not None:
             self.setWindowTitle('PolyHaven Asset Browser  |  '+VERSION)
             self.resize(1060,740)
             self.setMinimumSize(740,520)
-            self.assets=[]; self.roots=[]; self.icon_cache={}; self._busy=False
+            self.assets=[]; self.roots=[]; self.icon_cache={}; self._busy=False; self._standin_selection_key=None
             self._make_ui()
             self._load_roots()
             if self.roots: QtCore.QTimer.singleShot(0,self.refresh)
@@ -1148,7 +1148,7 @@ if QtWidgets is not None:
             self.height=QtWidgets.QDoubleSpinBox(); self.height.setRange(0.001,10000); self.height.setDecimals(3); self.height.setSingleStep(0.1); self.height.setValue(0.2); form.addRow('Height (scene units)',self.height)
             self.mid=QtWidgets.QDoubleSpinBox(); self.mid.setRange(-10000,10000); self.mid.setDecimals(3); self.mid.setSingleStep(0.1); self.mid.setValue(0.5); form.addRow('Height midpoint',self.mid)
             self.subdiv=QtWidgets.QSpinBox(); self.subdiv.setRange(0,5); self.subdiv.setValue(2); form.addRow('Subdiv iterations',self.subdiv)
-            self.proxy=QtWidgets.QCheckBox('Import as Arnold Stand-in'); self.proxy.setChecked(False); form.addRow(self.proxy)
+            self.proxy=QtWidgets.QCheckBox('Import as Arnold Stand-in'); self.proxy.setChecked(False); self.proxy.setToolTip('1回限りの設定です。インポート開始後に自動でOFFへ戻ります。\n警告でStand-inを選んでも、次のアセットには引き継ぎません。'); form.addRow(self.proxy)
             self.split_standin=QtWidgets.QCheckBox('Separate independent trees / groups into ASS'); self.split_standin.setChecked(True); self.split_standin.setToolTip('Automatically separate clearly distinct FBX groups.\nIf the FBX is flattened or its groups overlap, one ASS is exported to avoid splitting branches from leaves.'); form.addRow(self.split_standin)
             self.copy=QtWidgets.QCheckBox('Copy textures to Maya project'); self.copy.setChecked(True); form.addRow(self.copy)
             self.assign=QtWidgets.QCheckBox('Surfaces: assign to selection'); self.assign.setChecked(True); form.addRow(self.assign)
@@ -1240,8 +1240,20 @@ if QtWidgets is not None:
             i=item.data(QtCore.Qt.UserRole)
             return self.assets[i] if isinstance(i,int) and 0<=i<len(self.assets) else None
 
+        def _reset_standin_for_selection(self, key):
+            """Do not carry an explicit Stand-in choice into a different asset.
+
+            Ignore empty/intermediate selection during thumbnail list rebuilds.
+            Never reset during ordinary refresh of the same selected asset.
+            """
+            if key is None or key==self._standin_selection_key:return
+            self._standin_selection_key=key
+            self.proxy.setChecked(False)
+
         def on_selected(self,*_):
-            a=self.selected(); self.family.blockSignals(True); self.family.clear(); self.family.addItem('Auto (recommended)',None)
+            a=self.selected()
+            self._reset_standin_for_selection(('local', str(a.folder)) if a is not None else None)
+            self.family.blockSignals(True); self.family.clear(); self.family.addItem('Auto (recommended)',None)
             if a:
                 for key in sorted({mesh_family(p) for p in a.meshes}):self.family.addItem(key,key)
             self.family.blockSignals(False)
@@ -1300,7 +1312,7 @@ if QtWidgets is not None:
                     choice=standin_warning(self,hint['reason'])
                     if choice=='cancel':return
                     settings['_heavy_confirmed']=True
-                    if choice=='standin':settings['standin']=True; self.proxy.setChecked(True)
+                    if choice=='standin':settings['standin']=True
             settings['_parent']=self
             self._busy=True; self.import_btn.setEnabled(False); self.log('--- '+a.name+' ---')
             try:
@@ -1309,7 +1321,10 @@ if QtWidgets is not None:
             except UserCancelled as e:self.log(str(e))
             except Exception as e:
                 self.log('ERROR: '+str(e)); self.log(traceback.format_exc()); QtWidgets.QMessageBox.warning(self,'Asset import failed',str(e)+'\nSee the import log for details.')
-            finally:self._busy=False; self.import_btn.setEnabled(self.selected() is not None)
+            finally:
+                self._busy=False
+                self.proxy.setChecked(False)  # Stand-in is one-shot, even for manual checkbox use.
+                self.import_btn.setEnabled(self.selected() is not None)
 
 
 # ---------------- Local Poly Haven cache ----------------
@@ -1901,7 +1916,7 @@ if QtWidgets is not None:
         def __init__(self,parent=None):
             self.native_ready=False
             super(NativeBrowser,self).__init__(parent)
-            self.setObjectName('PolyHavenAssetBrowserV51'); self.setWindowTitle('PolyHaven Asset Browser | 5.3')
+            self.setObjectName('PolyHavenAssetBrowserV51'); self.setWindowTitle('PolyHaven Asset Browser | 5.3.1')
             self.resize(1220,870)
             self.cache=Path(cmds.internalVar(userAppDir=True))/'NativeAssetBrowser'
             (self.cache/'PolyHaven').mkdir(parents=True,exist_ok=True)
@@ -2008,6 +2023,7 @@ if QtWidgets is not None:
             if not self.online():
                 super(NativeBrowser,self).on_selected(*args); self.import_btn.setText('IMPORT / CREATE OPENPBR'); return
             slug=self.online_slug(); m=self.catalog.get(slug,{})
+            self._reset_standin_for_selection(('online', slug) if slug else None)
             self.family.blockSignals(True); self.family.clear(); self.family.addItem('Auto (FBX)',None); self.family.blockSignals(False); self.family.setEnabled(False)
             is_model=m.get('type')==2; self.lod.setEnabled(is_model); self.proxy.setEnabled(is_model); self.assign.setEnabled(m.get('type')==1); self.split_standin.setEnabled(is_model)
             enabled=bool(slug) and not self.jobs and not self._busy
@@ -2066,6 +2082,8 @@ if QtWidgets is not None:
                     QtWidgets.QMessageBox.warning(self,'マテリアルアサイン先の確認',SELECTION_REQUIRED); return
                 if confirm_project_copy(self,self.copy.isChecked()):
                     super(NativeBrowser,self).run_import()
+                else:
+                    self.proxy.setChecked(False)
 
         def snapshot_settings(self):
             s=self.settings(); s['family']=None
@@ -2088,12 +2106,13 @@ if QtWidgets is not None:
                     choice=standin_warning(self,hint['reason'])
                     if choice=='cancel':return
                     s['_heavy_confirmed']=True
-                    if choice=='standin':s['standin']=True; self.proxy.setChecked(True)
+                    if choice=='standin':s['standin']=True
             s['_parent']=self
             self.cancel=threading.Event()
             if self.catalog[slug]['type']==0:
                 self.jobs.append(('hdri',self.pool.submit(ph_acquire_hdri,slug,self.catalog[slug],s['hdri_res'],self.cache,self.cancel,self.messages.put),s,auto))
             else:self.jobs.append(('poly',self.pool.submit(ph_acquire,slug,self.catalog[slug],s['resolution'],s['lod'],self.cache,self.cancel,self.messages.put),s,auto))
+            self.proxy.setChecked(False)  # Queue captured its settings; next asset defaults to editable.
             self.cancel_btn.setEnabled(True); self.on_selected(); self.log('Queued Poly Haven: '+slug)
 
         def cancel_download(self):self.cancel.set(); self.log('Cancel requested; partial download will be discarded.')
@@ -2107,13 +2126,16 @@ if QtWidgets is not None:
                     choice=standin_warning(self,hint['reason'])
                     if choice=='cancel':return
                     s['_heavy_confirmed']=True
-                    if choice=='standin':s['standin']=True; self.proxy.setChecked(True)
+                    if choice=='standin':s['standin']=True
             s['_parent']=self
             self._busy=True; self.import_btn.setEnabled(False)
             try:import_asset(a,s,self.mapping,self.log); self.log('Import finished: '+a.name)
             except SelectionRequiredError as e:self.log(str(e)); QtWidgets.QMessageBox.warning(self,'マテリアルアサイン先の確認',str(e))
             except Exception as e:self.log('IMPORT ERROR: '+str(e)); self.log(traceback.format_exc()); QtWidgets.QMessageBox.warning(self,'Import failed',str(e))
-            finally:self._busy=False; self.on_selected()
+            finally:
+                self._busy=False
+                self.proxy.setChecked(False)
+                self.on_selected()
         def tick_native(self):
             if self.closing or self._busy:return
             while True:
