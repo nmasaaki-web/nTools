@@ -1,4 +1,4 @@
-# nTools v1.0.18
+# nTools v1.0.20
 
 Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
@@ -14,12 +14,14 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 | アイコン | ツール・操作マニュアル | バージョン | 機能 |
 |---|---|---|---|
 | [![SF](scripts/ntools/icons/sketchfab.png)](docs/tools/sketchfab.md) | [Sketchfab Asset Browser](docs/tools/sketchfab.md) | 1.3 | 静的glTFモデル、Specular-Glossiness自動変換、OpenPBR |
-| [![PH](scripts/ntools/icons/polyhaven.png)](docs/tools/polyhaven.md) | [PolyHaven Asset Browser](docs/tools/polyhaven.md) | 5.4.2 | 重いモデルの警告・木ごとのASS自動分割、モデル・HDRI・ローカルライブラリ |
+| [![PH](scripts/ntools/icons/polyhaven.png)](docs/tools/polyhaven.md) | [PolyHaven Asset Browser](docs/tools/polyhaven.md) | 5.4.4 | 重いモデルの警告・木ごとのASS自動分割、モデル・HDRI・ローカルライブラリ |
 | [![CITY](scripts/ntools/icons/city.png)](docs/tools/city_builder.md) | [Maya City Builder](docs/tools/city_builder.md) | 2.4.1 | OSM / PLATEAU / Procedural / 日本風の街並み生成 |
 | [![MAT](scripts/ntools/icons/material.png)](docs/tools/material_creator.md) | [Material Creator](docs/tools/material_creator.md) | 1.3 | ローカルテクスチャ / JSONからOpenPBR作成 |
 | [![RIG](scripts/ntools/icons/quadruped.png)](docs/tools/quadruped.md) | [Quadruped Quick Rig](docs/tools/quadruped.md) | 2.4.0 | 四足ガイド、IK/FK、試験的なリターゲット |
 | [![集合！](scripts/ntools/icons/collector.png)](docs/tools/data_collector.md) | [データ集合ツール / Data Collector](docs/tools/data_collector.md) | 1.1 | プロジェクト外のテクスチャ・キャッシュ・参照シーン等をコピーして再リンク |
 
+
+> **v1.0.20: PolyHaven v5.4.4** — 高負荷モデルの警告に「Separate independent trees / groups into ASS」チェックを追加しました。「複数の木や草がある場合」に使う、1回限りのオプションです。初期OFFで、チェック時にStand-inを選んだそのアセットだけに適用します。通常メッシュの選択・キャンセル時には無視し、次のアセットにも引き継ぎません。独立グループが判別できない場合、個別ASS化は保証されません。
 
 > **v1.0.18: PolyHaven v5.4.2** — 検索入力をタブ内の1欄に統一しました。Local Library / Poly Haven Assets / Poly Haven HDRIsで同じ検索を使えます。`Separate independent trees / groups into ASS` は初期OFFとなり、別アセットの選択やインポート開始後に自動でOFFへ戻ります。Stand-inが必要なときだけチェックしてください。
 

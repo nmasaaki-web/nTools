@@ -35,7 +35,7 @@ class Button:
 
 class StandInOneShotTests(unittest.TestCase):
     def test_switching_assets_resets_manual_choice_but_refresh_does_not(self):
-        fake=types.SimpleNamespace(proxy=Check(),_standin_selection_key=None)
+        fake=types.SimpleNamespace(proxy=Check(),split_standin=Check(),_standin_selection_key=None)
         method('AssetBrowser','_reset_standin_for_selection')(fake,('online','fir'))
         fake.proxy.setChecked(True)
         method('AssetBrowser','_reset_standin_for_selection')(fake,('online','fir'))
@@ -49,7 +49,7 @@ class StandInOneShotTests(unittest.TestCase):
         asset=types.SimpleNamespace(name='Fir',meshes=['mesh'])
         out=[]
         fake=types.SimpleNamespace(
-            proxy=proxy,_busy=False,
+            proxy=proxy,split_standin=Check(),_busy=False,
             selected=lambda:asset,
             settings=lambda:{'standin':proxy.isChecked(),'lod':1,'family':None},
             mapping=object(),log=out.append,
@@ -64,7 +64,7 @@ class StandInOneShotTests(unittest.TestCase):
         asset=types.SimpleNamespace(name='Fir',meshes=['mesh'])
         out=[]
         fake=types.SimpleNamespace(
-            proxy=proxy,_busy=False,
+            proxy=proxy,split_standin=Check(),_busy=False,
             selected=lambda:asset,
             settings=lambda:{'standin':proxy.isChecked(),'lod':1,'family':None},
             mapping=object(),log=out.append,
@@ -82,7 +82,7 @@ class StandInOneShotTests(unittest.TestCase):
         proxy=Check(manual)
         submitted=[]
         fake=types.SimpleNamespace(
-            proxy=proxy,_busy=False,jobs=[],catalog={'fir':{'type':2}},
+            proxy=proxy,split_standin=Check(),_busy=False,jobs=[],catalog={'fir':{'type':2}},
             online_slug=lambda:'fir',assign=Check(False),copy=Check(False),
             hdri_mode=lambda:False,
             snapshot_settings=lambda:{'standin':proxy.isChecked(),'hdri_res':2,'resolution':2,'lod':1,'family':None},
@@ -109,7 +109,7 @@ class StandInOneShotTests(unittest.TestCase):
         self.assertNotIn(True,fake.proxy.changes)
     def test_online_import_ready_resets_one_shot_checkbox(self):
         proxy=Check(True)
-        fake=types.SimpleNamespace(proxy=proxy,_busy=False,import_btn=Button(),
+        fake=types.SimpleNamespace(proxy=proxy,split_standin=Check(),_busy=False,import_btn=Button(),
             on_selected=lambda:None,mapping=object(),log=lambda _:None)
         with mock.patch.object(mod,'import_asset') as called:
             method('NativeBrowser','import_ready')(fake,types.SimpleNamespace(name='Fir',meshes=['mesh']),{'standin':True},)

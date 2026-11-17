@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PolyHaven Asset Browser v5.4.2.
+"""PolyHaven Asset Browser v5.4.4.
 Paste into Maya Python Script Editor, or import polyhaven_asset_browser; call show().
 Poly Haven public API, local library, OpenPBR and Arnold. No Fab UI.
 """
@@ -32,7 +32,7 @@ except ImportError:
     except ImportError:
         QtCore = QtGui = QtWidgets = wrapInstance = None
 
-VERSION = '5.4.2'
+VERSION = '5.4.4'
 MESH_EXT = {'.fbx', '.obj'}
 IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.exr', '.tga', '.bmp', '.tx', '.hdr', '.webp'}
 SKIP_DIRS = {'.git', '__pycache__', 'node_modules', 'maya_asset_browser', 'standins', 'sourceimages'}
@@ -768,6 +768,66 @@ def mapping_summary(settings, log, parent=None):
         box.exec() if hasattr(box,'exec') else box.exec_()
 
 
+def fir_tree_01_standin_suggestions(asset, unresolved, keys):
+    """Suggest (never silently apply) the three Fir Tree 01 trunk material sets.
+
+    This rule only covers the *specific* Poly Haven Fir Tree 01 layout:
+    fir_tree_01_{a,b,c}_LOD*Shape / fir_tree_01_{a,b,c}_LOD*SG*.
+    A matching variant letter is useful evidence, not proof of shader identity.
+    Other models and uncertain/duplicate bindings are never guessed.
+    """
+    if re.sub(r'[^a-z0-9]+', '_', str(asset.name).lower()).strip('_') != 'fir_tree_01':
+        return []
+    if not unresolved or len(unresolved)>3:return []
+    keys=set(keys)
+    result=[]; used=set()
+    for sg,shape,faces,total in unresolved:
+        leaf=str(shape).split('|')[-1].split(':')[-1].lower()
+        shader=str(sg).split('|')[-1].split(':')[-1].lower()
+        shape_m=re.fullmatch(r'fir_tree_01_([abc])_lod\d+shape',leaf)
+        shader_m=re.fullmatch(r'fir_tree_01_([abc])_lod\d+sg\d*',shader)
+        if not shape_m or not shader_m or shape_m.group(1)!=shader_m.group(1):return []
+        key='fir_tree_01_trunk_'+shape_m.group(1)
+        if key not in keys or key in used:return []
+        used.add(key);result.append((shape,faces,total,key))
+    return result
+
+
+def unresolved_standin_decision(parent,asset,unresolved,suggestions):
+    """Explicit confirmation: do not silently override the user's Stand-in choice.
+
+    'suggested': user accepts an asset-specific *unverified* material inference
+    'original': preserve unresolved FBX shaders and still export ASS
+    'editable': keep the imported editable mesh, without writing an ASS
+    'cancel': undo the import transaction
+    """
+    if QtWidgets is None:return 'editable'
+    box=QtWidgets.QMessageBox(parent)
+    box.setIcon(QtWidgets.QMessageBox.Warning)
+    box.setWindowTitle('ASS書き出し前のマテリアル確認')
+    box.setText('Stand-inを選択しましたが、%d件のマテリアルを自動判定できません。'%len(unresolved))
+    detail=('このままASSを書き出すと、元のFBXシェーダーが正しくレンダリングされない可能性があります。\n'
+            'ASS書き出し後はマテリアルの修正が難しくなります。\n\n')
+    guessed=None
+    if suggestions and len(suggestions)==len(unresolved):
+        detail+='ファイル名から推定した候補（確定情報ではありません）:\n'
+        detail+='\n'.join('  '+str(shape).split('|')[-1]+' → '+key for shape,_,_,key in suggestions)
+        detail+='\n\n候補の採用後もArnoldレンダリングで見た目をご確認ください。\n\n'
+        guessed=box.addButton('推定素材を適用してASS化',QtWidgets.QMessageBox.AcceptRole)
+    detail+='「現状のままASS化」は未確定マテリアルを残します。外観は保証されません。'
+    box.setInformativeText(detail)
+    original=box.addButton('現状のままASS化（外観未確認）',QtWidgets.QMessageBox.ActionRole)
+    editable=box.addButton('編集可能メッシュで保持（推奨）',QtWidgets.QMessageBox.ActionRole)
+    cancel=box.addButton('取り込みをキャンセル',QtWidgets.QMessageBox.RejectRole)
+    box.setDefaultButton(editable)
+    box.exec() if hasattr(box,'exec') else box.exec_()
+    clicked=box.clickedButton()
+    if guessed is not None and clicked is guessed:return 'suggested'
+    if clicked is original:return 'original'
+    if clicked is editable:return 'editable'
+    return 'cancel'
+
+
 def shader_hints(sg,shape):
     hints=[shape,sg]
     if sg and cmds.objExists(sg):
@@ -1058,6 +1118,7 @@ def import_asset(asset,settings,choose_mapping,log):
         mesh_lod=lod_of(mesh,asset.folder)[1] if mesh and lod_of(mesh,asset.folder)[0]=='LOD' else None
         keys=sorted(asset.textures)
         settings['_unresolved_materials']=[]
+        unresolved_bindings=[]
         materials={}
         def material_for(key):
             nonlocal changed
@@ -1089,6 +1150,7 @@ def import_asset(asset,settings,choose_mapping,log):
                         plans.append((shape,faces,total,key))
                         log('  Auto / approved mapping: '+str(sg)+' -> '+key)
                     else:
+                        unresolved_bindings.append((sg,shape,faces,total))
                         settings['_unresolved_materials'].append((str(sg),str(shape)))
                         log('  UNRESOLVED (kept FBX shader, not preview-verified): '+str(sg)+' / '+shape)
             for shape,faces,total,key in plans:
@@ -1101,17 +1163,45 @@ def import_asset(asset,settings,choose_mapping,log):
             if not settings['standin'] and not settings.get('_heavy_confirmed'):
                 tri_count=imported_triangles(selected_shapes)
                 if tri_count>=HEAVY_TRIANGLES:
-                    choice=standin_warning(settings.get('_parent'),['読み込み後の実測: 約%.1f万三角形'%(tri_count/10000)])
+                    choice=standin_warning(settings.get('_parent'),['読み込み後の実測: 約%.1f万三角形'%(tri_count/10000)],settings)
                     if choice=='cancel':raise UserCancelled('Heavy model import cancelled.')
                     if choice=='standin':settings['standin']=True
             if settings['standin']:
-                if settings['_unresolved_materials']:
-                    log('WARNING: ASS export skipped: ambiguous source material(s). Keeping editable mesh for inspection.')
+                permit_export=True
+                if unresolved_bindings:
+                    suggestions=fir_tree_01_standin_suggestions(asset,unresolved_bindings,keys)
+                    decision=unresolved_standin_decision(settings.get('_parent'),asset,unresolved_bindings,suggestions)
+                    if decision=='cancel':
+                        raise UserCancelled('Stand-in import cancelled; undoing imported mesh.')
+                    elif decision=='editable':
+                        permit_export=False
+                        log('ASS: user chose to keep editable mesh after material warning.')
+                    elif decision=='suggested':
+                        # This is a *user-approved*, asset-specific inference, not automatic mapping.
+                        for shape,faces,total,key in suggestions:
+                            material=material_for(key)
+                            members=components(shape,faces,total)
+                            for i in range(0,len(members),2000):
+                                cmds.sets(members[i:i+2000],edit=True,forceElement=material['sg'])
+                            setup_shape(shape,material,settings)
+                            log('  USER-APPROVED INFERRED mapping: '+shape+' -> '+key)
+                        settings['_unresolved_materials']=[]
+                        log('WARNING: Fir Tree 01 variant mapping is an inference. Confirm Arnold appearance against source.')
+                    elif decision=='original':
+                        log('WARNING: User explicitly approved ASS with unresolved original FBX materials; render appearance is NOT verified.')
+                    else:
+                        raise RuntimeError('Unexpected Stand-in material choice: '+str(decision))
                 elif not plans:
-                    log('WARNING: ASS export skipped: no material assignments verified. Keeping editable mesh.')
-                else:
-                    try: root=export_standin(root,asset,log,settings.get('standin_split','auto'))
-                    except Exception as e: log('WARNING: Stand-in failed; keeping editable geometry. '+str(e))
+                    permit_export=False
+                    log('WARNING: ASS export skipped: no materials identified. Keeping editable mesh.')
+                if permit_export:
+                    try:
+                        root=export_standin(root,asset,log,settings.get('standin_split','auto'))
+                    except Exception as e:
+                        log('WARNING: Stand-in failed; keeping editable geometry. '+str(e))
+                        if QtWidgets is not None and settings.get('_parent') is not None:
+                            QtWidgets.QMessageBox.warning(settings['_parent'],'ASS export failed',
+                               'ASS書き出しに失敗しました。編集可能メッシュは保持されています。\n'+str(e))
             cmds.select(root,replace=True)
         else:
             for key in keys: material_for(key)
@@ -1135,20 +1225,41 @@ def import_asset(asset,settings,choose_mapping,log):
                 if cmds.undoInfo(query=True,state=True): cmds.undo()
             except Exception as e: log('WARNING: Undo failed: '+str(e))
 
-def standin_warning(parent,reasons):
-    """Return standin / editable / cancel. Explicit choice, never force export."""
-    dialog=QtWidgets.QMessageBox(parent)
+def standin_warning(parent, reasons, settings=None):
+    """Ask about heavy geometry and optional per-import ASS splitting.
+
+    The checkbox is *off* for each new asset by default.  A user may already
+    have explicitly enabled the advanced split option for this particular
+    asset; in that case the confirmation reflects their existing choice.
+    The result is written to the captured import settings, not the persistent
+    browser checkbox, so it cannot leak into the next asset/queued download.
+    """
+    dialog = QtWidgets.QMessageBox(parent)
     dialog.setIcon(QtWidgets.QMessageBox.Warning)
     dialog.setWindowTitle('高負荷モデルの確認 / Arnold Stand-in')
     dialog.setText('このモデルは重い可能性があります。\nArnold Stand-inとして取り込まなくていいですか？')
-    dialog.setInformativeText('\n'.join(reasons)+'\n\nStand-inはMayaのビューポート負荷を減らしますが、直接ポリゴン編集できなくなります。\n複数の独立した木のグループは可能な場合に個別ASS化します。')
-    yes=dialog.addButton('Stand-inで取り込む（推奨）',QtWidgets.QMessageBox.AcceptRole)
-    no=dialog.addButton('通常のメッシュで取り込む',QtWidgets.QMessageBox.DestructiveRole)
-    dialog.addButton('キャンセル',QtWidgets.QMessageBox.RejectRole)
+    dialog.setInformativeText(
+        '\n'.join(reasons)
+        + '\n\nStand-inはMayaのビューポート負荷を減らしますが、直接ポリゴン編集できなくなります。'
+        + '\n\n一つのアセットに複数の木や草などが存在する場合は、以下をチェックしてください。'
+        + '\n※ 元データ内で独立したグループを識別できた場合のみ個別ASSを作成します。'
+    )
+    separate = QtWidgets.QCheckBox('Separate independent trees / groups into ASS', dialog)
+    separate.setChecked(bool(settings and settings.get('standin_split') == 'auto'))
+    separate.setToolTip('初期値OFF。木・草などが独立したFBXグループとして判別できる場合に、個別ASS化します。')
+    dialog.setCheckBox(separate)
+    yes = dialog.addButton('Stand-inで取り込む（推奨）', QtWidgets.QMessageBox.AcceptRole)
+    no = dialog.addButton('通常のメッシュで取り込む', QtWidgets.QMessageBox.DestructiveRole)
+    dialog.addButton('キャンセル', QtWidgets.QMessageBox.RejectRole)
     dialog.setDefaultButton(yes)
-    dialog.exec() if hasattr(dialog,'exec') else dialog.exec_()
-    button=dialog.clickedButton()
-    return 'standin' if button is yes else ('editable' if button is no else 'cancel')
+    dialog.exec() if hasattr(dialog, 'exec') else dialog.exec_()
+    button = dialog.clickedButton()
+    choice = 'standin' if button is yes else ('editable' if button is no else 'cancel')
+    if settings is not None:
+        # The checkbox is meaningful only for Stand-in.  On any other action,
+        # ignore it and keep normal editable-mesh behavior unchanged.
+        settings['standin_split'] = 'auto' if choice == 'standin' and separate.isChecked() else 'single'
+    return choice
 
 
 # ---------------- PySide browser ----------------
@@ -1343,7 +1454,7 @@ if QtWidgets is not None:
             self.detail.setPlainText('\n'.join(lines))
 
         def mapping(self,sg,shape,keys):
-            # Student default: no per-material dialog and no unsupported guess.
+            # Student default: no per-material dialog; Stand-in requires explicit confirmation if unresolved.
             # Multiple surface-only materials still require choosing what to apply
             # to the user's selected polygon; this is not FBX material ambiguity.
             if sg!='Selected objects' and not self.manual_mapping.isChecked():return None
@@ -1366,7 +1477,7 @@ if QtWidgets is not None:
                 mesh=choose_mesh(a,settings['lod'],settings['family'])
                 hint=heavy_asset_hint(a,mesh)
                 if hint['warn']:
-                    choice=standin_warning(self,hint['reason'])
+                    choice=standin_warning(self,hint['reason'],settings)
                     if choice=='cancel':return
                     settings['_heavy_confirmed']=True
                     if choice=='standin':settings['standin']=True
@@ -2229,7 +2340,7 @@ if QtWidgets is not None:
             if auto and self.catalog[slug]['type']==2 and not s['standin']:
                 hint=heavy_asset_hint(catalog_meta=self.catalog[slug])
                 if hint['warn']:
-                    choice=standin_warning(self,hint['reason'])
+                    choice=standin_warning(self,hint['reason'],s)
                     if choice=='cancel':return
                     s['_heavy_confirmed']=True
                     if choice=='standin':s['standin']=True
@@ -2250,7 +2361,7 @@ if QtWidgets is not None:
                 mesh=choose_mesh(a,s['lod'],s.get('family'))
                 hint=heavy_asset_hint(a,mesh)
                 if hint['warn']:
-                    choice=standin_warning(self,hint['reason'])
+                    choice=standin_warning(self,hint['reason'],s)
                     if choice=='cancel':return
                     s['_heavy_confirmed']=True
                     if choice=='standin':s['standin']=True
@@ -2261,6 +2372,7 @@ if QtWidgets is not None:
                 self.log('Import finished: '+a.name)
                 mapping_summary(s,self.log,self)
             except SelectionRequiredError as e:self.log(str(e)); QtWidgets.QMessageBox.warning(self,'マテリアルアサイン先の確認',str(e))
+            except UserCancelled as e:self.log('Cancelled: '+str(e))
             except Exception as e:self.log('IMPORT ERROR: '+str(e)); self.log(traceback.format_exc()); QtWidgets.QMessageBox.warning(self,'Import failed',str(e))
             finally:
                 self._busy=False

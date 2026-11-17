@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "nTools",
-  "version": "1.0.18",
+  "version": "1.0.20",
   "tools": [
     {
       "id": "sketchfab",
@@ -19,9 +19,9 @@
       "entry": "show",
       "label": "PolyHaven Asset Browser",
       "short": "PH",
-      "version": "5.4.2",
+      "version": "5.4.4",
       "icon": "polyhaven.png",
-      "description": "Poly Haven: one search bar across all tabs; Stand-in splitting defaults OFF and resets after import"
+      "description": "Poly Haven: heavy-model warning has per-import ASS group splitting checkbox; material confirmation retained"
     },
     {
       "id": "city",
@@ -72,7 +72,7 @@
     "scripts/ntools/tools/data_collector.py": "8a61c26a3fa332ecbc1d20c22937eb5a4a2effd4de19f99a03f37aaccec6f2b3",
     "scripts/ntools/tools/material_creator.py": "36e16e108120600abddacec4a6415cb9ce408b78063720ca1542bb05bfcb00e1",
     "scripts/ntools/tools/maya_city_builder.py": "e3200ff543c3974aa14426ef6323570692b8bc0e5be414503ab9059d370db8b9",
-    "scripts/ntools/tools/polyhaven_asset_browser.py": "b1e4a44279b69cb965d99d78de7adbda2ae9393e91fddd597060ac1e96e09d45",
+    "scripts/ntools/tools/polyhaven_asset_browser.py": "ecb659bd5667d5bd6355505886d3fed8e67be0cca0efff90442cf9d9167856ea",
     "scripts/ntools/tools/quadruped_quick_rig.py": "490401df593f436e22ba5f9abc269e135dc3ca45a9682687f93067daf04842c2",
     "scripts/ntools/tools/sketchfab_asset_browser.py": "689e0b947f597f82da660b2275fd1901650688f069a2f55b0130b33cbd524179",
     "scripts/ntools/icons/city.png": "12c0f8a7e70ab282a9db18768d41881c41eb36d24e3b76e6000aa30c46418cec",
