@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "nTools",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "tools": [
     {
       "id": "sketchfab",
@@ -60,7 +60,7 @@
       "entry": "show",
       "label": "Data Collector / データ集合ツール",
       "short": "集合!",
-      "version": "1.0",
+      "version": "1.1",
       "icon": "collector.png",
       "description": "Collect external textures, references, caches and Stand-in files into the active Maya project"
     }
@@ -69,7 +69,7 @@
     "install.py": "02350a46ff055b88eb18584113b806bf1b408df743c64e0f2bc444da055ae00f",
     "scripts/ntools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
-    "scripts/ntools/tools/data_collector.py": "7b40c605c03a24ce1927c3a0350b89179d37d10896e71576d547a74b12676fd3",
+    "scripts/ntools/tools/data_collector.py": "8a61c26a3fa332ecbc1d20c22937eb5a4a2effd4de19f99a03f37aaccec6f2b3",
     "scripts/ntools/tools/material_creator.py": "36e16e108120600abddacec4a6415cb9ce408b78063720ca1542bb05bfcb00e1",
     "scripts/ntools/tools/maya_city_builder.py": "e3200ff543c3974aa14426ef6323570692b8bc0e5be414503ab9059d370db8b9",
     "scripts/ntools/tools/polyhaven_asset_browser.py": "ab13591e4d99d06591ee4d993adeca866b089b16f90ab4d62f8ca37de91c92fa",

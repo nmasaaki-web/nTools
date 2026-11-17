@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""nTools Data Collector / データ集合ツール v1.0.
+"""nTools Data Collector / データ集合ツール v1.1.
 
 Collect external dependencies into the active Maya project without deleting originals.
 Deliberately conservative: backed-up, saved scene; editable nodes only; no
@@ -19,7 +19,7 @@ import shutil
 import traceback
 import webbrowser
 
-VERSION = '1.0'
+VERSION = '1.1'
 WINDOW = 'nToolsDataCollectorWindow'
 HELP = 'https://github.com/nmasaaki-web/nTools/blob/main/docs/tools/data_collector.md'
 MAX_ITEMS_PER_ENTRY = 10000
@@ -240,7 +240,16 @@ def scan(cmds=None):
     cmds=cmds or _maya()
     root=project_root(cmds)
     items=[]
+    # Asking ls(type=...) for a node type provided by an unloaded plug-in
+    # emits a Maya warning even if Python catches exceptions. Inspect the
+    # registered type list first; never auto-load third-party plug-ins here.
+    try:
+        known_types = set(cmds.allNodeTypes())
+    except (AttributeError, RuntimeError, TypeError):
+        known_types = None  # Older/mocked Maya API: retain legacy behavior.
     for node_type,attr,kind,folder in KINDS:
+        if known_types is not None and node_type not in known_types:
+            continue
         try: nodes=cmds.ls(type=node_type) or []
         except Exception: nodes=[]
         for node in nodes:
@@ -464,11 +473,63 @@ class CollectorWindow:
         self.root=None
         self.entries=[]
         self.widgets=[]
+        self.list_layout=None
+        self.project_text=None
         self.refresh()
 
     def refresh(self):
-        self.root,self.entries=scan(self.cmds)
-        if self.cmds.window(WINDOW,exists=True):self.build()
+        """Rescan without destroying the window or its active button callback.
+
+        Only the *rows* in the results layout are replaced. Remember existing
+        user checkboxes by entry key; newly discovered items default checked.
+        """
+        previous={}
+        for entry, box in self.widgets:
+            try: previous[entry['key']]=bool(self.cmds.checkBox(box,q=True,value=True))
+            except (RuntimeError, ValueError): pass
+        try:
+            new_root, new_entries = scan(self.cmds)
+        except Exception as exc:
+            traceback.print_exc()
+            if self.cmds.window(WINDOW,exists=True):
+                _notify('再スキャンに失敗しました。\n'+str(exc)+'\n\n詳細はScript Editorを確認してください。')
+            return
+        self.root,self.entries=new_root,new_entries
+        if (self.cmds.window(WINDOW,exists=True)
+                and self.list_layout is not None):
+            if self.project_text:
+                self.cmds.text(self.project_text,e=True,label='Project: '+str(self.root))
+            self._populate_list(previous)
+
+    def _populate_list(self, previous=None):
+        """Update only result rows; never delete the Maya window itself."""
+        cmds=self.cmds
+        previous=previous or {}
+        if not self.list_layout:
+            return
+        # The rescan button lives outside this layout; deleting these child
+        # rows cannot invalidate the button executing the callback.
+        for child in cmds.columnLayout(self.list_layout,q=True,childArray=True) or []:
+            cmds.deleteUI(child)
+        saved_parent=cmds.setParent(q=True)
+        self.widgets=[]
+        try:
+            cmds.setParent(self.list_layout)
+            for entry in self.entries:
+                enabled=bool(entry['members'] and not entry['readonly'])
+                cmds.rowLayout(numberOfColumns=4,columnWidth4=(32,135,320,430))
+                box=cmds.checkBox(label='',value=(previous.get(entry['key'],True) if enabled else False),enable=enabled)
+                cmds.text(label=entry['kind'],align='left')
+                cmds.text(label=entry['label'],align='left',annotation=entry['plug'])
+                info=entry['status']+' | '+entry['source']
+                cmds.text(label=info if len(info)<100 else info[:97]+'...',align='left',annotation=info)
+                cmds.setParent('..')
+                self.widgets.append((entry,box))
+            if not self.entries:
+                cmds.text(label='プロジェクト外の依存ファイルは見つかりませんでした（対応ノードのみ）。',align='center',height=75)
+        finally:
+            if saved_parent:
+                cmds.setParent(saved_parent)
 
     def choose(self,value):
         for entry,box in self.widgets:
@@ -506,14 +567,16 @@ class CollectorWindow:
 
     def build(self):
         cmds=self.cmds
-        if cmds.window(WINDOW,exists=True):cmds.deleteUI(WINDOW)
+        # build() runs for the *first* display, never on rescan.
+        if cmds.window(WINDOW,exists=True):
+            raise RuntimeError('データ集合ツールは既に開いています。')
         cmds.window(WINDOW,title='データ集合ツール v'+VERSION+' | nTools',widthHeight=(970,660),sizeable=True)
         cmds.columnLayout(adjustableColumn=True,rowSpacing=8)
         cmds.rowLayout(numberOfColumns=2,adjustableColumn=1,columnWidth2=(790,140))
         cmds.text(label='データ集合ツール  |  外部データをプロジェクトへ集合！',font='boldLabelFont',align='left')
         cmds.button(label='Help / 使い方',command=self.help)
         cmds.setParent('..')
-        cmds.text(label='Project: '+str(self.root),align='left')
+        self.project_text=cmds.text(label='Project: '+str(self.root),align='left')
         cmds.text(label='チェックの付いたファイルをコピーして、現在のシーンのリンクを更新します。元データは変更しません。',align='left')
         cmds.rowLayout(numberOfColumns=3,columnWidth3=(180,180,180))
         cmds.button(label='一覧を再スキャン',command=lambda *_:self.refresh())
@@ -526,20 +589,8 @@ class CollectorWindow:
             cmds.text(label=v,align='left',font='boldLabelFont')
         cmds.setParent('..')
         cmds.scrollLayout(height=420,childResizable=True)
-        cmds.columnLayout(adjustableColumn=True,rowSpacing=4)
-        self.widgets=[]
-        for entry in self.entries:
-            enabled=bool(entry['members'] and not entry['readonly'])
-            cmds.rowLayout(numberOfColumns=4,columnWidth4=(32,135,320,430))
-            box=cmds.checkBox(label='',value=enabled,enable=enabled)
-            cmds.text(label=entry['kind'],align='left')
-            cmds.text(label=entry['label'],align='left',annotation=entry['plug'])
-            text=entry['status']+' | '+entry['source']
-            cmds.text(label=text if len(text)<100 else text[:97]+'...',align='left',annotation=text)
-            cmds.setParent('..')
-            self.widgets.append((entry,box))
-        if not self.entries:
-            cmds.text(label='プロジェクト外の依存ファイルは見つかりませんでした（対応ノードのみ）。',align='center',height=75)
+        self.list_layout=cmds.columnLayout(adjustableColumn=True,rowSpacing=4)
+        self._populate_list()
         cmds.setParent('..')
         cmds.setParent('..')
         cmds.separator(style='in',height=8)

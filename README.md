@@ -1,4 +1,4 @@
-# nTools v1.0.12
+# nTools v1.0.13
 
 Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
@@ -18,8 +18,10 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 | [![CITY](scripts/ntools/icons/city.png)](docs/tools/city_builder.md) | [Maya City Builder](docs/tools/city_builder.md) | 2.4.1 | OSM / PLATEAU / Procedural / 日本風の街並み生成 |
 | [![MAT](scripts/ntools/icons/material.png)](docs/tools/material_creator.md) | [Material Creator](docs/tools/material_creator.md) | 1.3 | ローカルテクスチャ / JSONからOpenPBR作成 |
 | [![RIG](scripts/ntools/icons/quadruped.png)](docs/tools/quadruped.md) | [Quadruped Quick Rig](docs/tools/quadruped.md) | 2.4.0 | 四足ガイド、IK/FK、試験的なリターゲット |
-| [![集合！](scripts/ntools/icons/collector.png)](docs/tools/data_collector.md) | [データ集合ツール / Data Collector](docs/tools/data_collector.md) | 1.0 | プロジェクト外のテクスチャ・キャッシュ・参照シーン等をコピーして再リンク |
+| [![集合！](scripts/ntools/icons/collector.png)](docs/tools/data_collector.md) | [データ集合ツール / Data Collector](docs/tools/data_collector.md) | 1.1 | プロジェクト外のテクスチャ・キャッシュ・参照シーン等をコピーして再リンク |
 
+
+> **v1.0.13: データ集合ツール再スキャン修正** — 再スキャン時にウィンドウ全体を閉じず、一覧だけを更新します。未登録のUSDノードタイプの照会をスキップして警告を抑制し、チェック状態も保持します。実機での確認は必要です。
 
 > **v1.0.12: データ集合ツール追加** — シェルフのRIG右側、Separator左側に「集合！」アイコンを追加。外部ファイルを一覧から選択してプロジェクト内へコピー・再リンクできます。元ファイルは削除せず、実行前の保存済みシーンをバックアップします。**すべての外部依存を完全に収集できるわけではないため、必ず別PC等で確認してください。**
 
@@ -27,7 +29,7 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 
 > v1.0.10ではSketchfab Asset Browser v1.3を収録し、Specular-GlossinessからMetallic-Roughnessへの変換に対応しました（テクスチャ・透明度を含む）。全glTF拡張に対応するわけではありません。
 
-> v1.0.5では各ツール右上にHelpを追加し、シェルフにHelpを追加しました。既存4ツールのマニュアルに操作図・GIF・MP4を掲載しています（実機キャプチャではありません）。v1.0.7でRIGとHelpの間にSeparatorを追加しました。v1.0.8ではCITYをMATの左に、データ集合ツールをRIGの右に追加します。v1.0.3〜1.0.7からはUpdate → Maya再起動 → Update（もう一度）で移行できます。管理コードの実行は不要です。
+> v1.0.5では各ツール右上にHelpを追加し、シェルフにHelpを追加しました。既存4ツールのマニュアルに操作図・GIF・MP4を掲載しています（実機キャプチャではありません）。v1.0.7でRIGとHelpの間にSeparatorを追加しました。v1.0.8ではCITYをMATの左に、v1.0.12ではデータ集合ツールをRIGの右に追加しました。v1.0.3〜1.0.7からはUpdate → Maya再起動 → Update（もう一度）で移行できます。管理コードの実行は不要です。
 
 ## 初回導入（学生）
 
@@ -94,7 +96,7 @@ nt.uninstall()
 2. 本体更新後、Mayaを再起動する。旧版の更新処理はCITYの追加を知らないため、シェルフ構成不一致と表示されることがある。本体更新が完了していれば再起動後のUpdateで移行できる。
 3. **Updateをもう一度押す。** 本体が最新版でも不足するCity Builder・データ集合ツール・管理ボタン・Separatorを確認・追加する。SF → PH → CITY → MAT → RIG → 集合！ → Separator → Help → Uninstall → Updateの順になる。この操作だけなら再起動不要。
 
-既にv1.0.8以降を読み込んでいる場合、Updateの1回の操作で本体更新とシェルフの同期を行う。ただしv1.0.10以前のUpdaterを実行してv1.0.11に移行する最初の1回は、旧Updaterの仕様上再起動が必要。新規導入は最初から8ボタンと1個のSeparatorを登録する。
+既にv1.0.8以降を読み込んでいる場合、Updateの1回の操作で本体更新とシェルフの同期を行う。ただしv1.0.10以前のUpdaterを実行してv1.0.11に移行する最初の1回は、旧Updaterの仕様上再起動が必要。新規導入は最初から9ボタンと1個のSeparatorを登録する。
 
 カスタムボタンや未知のツール構成がある場合、自動同期を中止して本体を保持する。既知のCity Builder・データ集合ツールの追加のみ自動移行対象。未知のツール追加・削除は対象外。
 
