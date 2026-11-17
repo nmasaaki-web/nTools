@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PolyHaven Asset Browser v5.2.
+"""PolyHaven Asset Browser v5.3.
 Paste into Maya Python Script Editor, or import polyhaven_asset_browser; call show().
 Poly Haven public API, local library, OpenPBR and Arnold. No Fab UI.
 """
@@ -32,10 +32,16 @@ except ImportError:
     except ImportError:
         QtCore = QtGui = QtWidgets = wrapInstance = None
 
-VERSION = '5.2'
+VERSION = '5.3'
 MESH_EXT = {'.fbx', '.obj'}
 IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.exr', '.tga', '.bmp', '.tx', '.hdr', '.webp'}
 SKIP_DIRS = {'.git', '__pycache__', 'node_modules', 'maya_asset_browser', 'standins', 'sourceimages'}
+# Practical first-pass warning thresholds, not Autodesk hard limits.
+HEAVY_TRIANGLES = 500_000
+VERY_HEAVY_TRIANGLES = 1_000_000
+HEAVY_FBX_BYTES = 100 * 1024 * 1024
+MAX_SPLIT_UNITS = 16
+
 MAP_ALIASES = {
     'base': ('base_color','base_colour','basecolor','basecolour','albedo','diffuse','diff','color','colour'),
     'normal_gl': ('normal_opengl','normal_gl','normalgl','normalsgl','nor_gl','opengl_normal','normal','nrm','nor'),
@@ -789,26 +795,177 @@ def import_mesh(path,root):
     return [s for s in (cmds.listRelatives(root_long,allDescendents=True,type='mesh',fullPath=True) or []) if not cmds.getAttr(s+'.intermediateObject')]
 
 
-def export_standin(root,asset,log):
-    folder=workspace_root()/'data'/'AssetBrowser'/'standins'; folder.mkdir(parents=True,exist_ok=True)
-    dest=folder/(clean_name(asset.name)+'_'+uuid.uuid4().hex[:10]+'.ass')
-    cmds.select(root,replace=True)
-    # Arnold mask 8=shape, 16=shader. No cameras/lights/render options.
-    cmds.arnoldExportAss(filename=dest.as_posix(),selected=True,mask=24,lightLinks=0,shadowLinks=0)
-    if not dest.is_file() or dest.stat().st_size==0: raise RuntimeError('ASS export failed: '+str(dest))
-    log('NOTE: ASS archive may contain absolute internal texture paths. Verify Arnold texture search paths before moving to another PC.')
-    proxy=cmds.createNode('transform',name=clean_name(asset.name)+'_StandIn')
+def _safe_polycount(value):
     try:
-        shape=cmds.createNode('aiStandIn',name=clean_name(asset.name)+'_StandInShape',parent=proxy)
-        cmds.setAttr(shape+'.dso',project_path(dest),type='string')
-        # Preserve shaders baked into the archive, rather than overriding them.
-        set_if(shape,'overrideShaders',False)
+        value = int(value)
+        return value if 0 < value < 2_000_000_000 else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def heavy_asset_hint(asset=None, mesh=None, catalog_meta=None):
+    """Conservative *pre-import* hint; never treat texture/package MB as geometry MB.
+
+    Official Poly Haven polycount is a high-detail asset-wide statistic; the
+    selected FBX LOD may contain far fewer triangles.
+    """
+    meta = catalog_meta if isinstance(catalog_meta, dict) else {}
+    tris = _safe_polycount(meta.get('polycount'))
+    if tris is None and asset is not None:
+        marker = Path(asset.folder) / 'native_asset_info.json'
+        if marker.is_file():
+            try:
+                info = json.loads(marker.read_text(encoding='utf-8'))
+                tris = _safe_polycount(info.get('polycount'))
+            except (OSError, ValueError, UnicodeError):
+                pass
+    mesh_bytes = None
+    if mesh is not None:
+        try:
+            if Path(mesh).is_file():mesh_bytes = Path(mesh).stat().st_size
+        except OSError:pass
+    reason=[]
+    if tris is not None and tris >= HEAVY_TRIANGLES:
+        reason.append('Poly Haven掲載値: 約%s万三角形（選択したLODの実測値とは限りません）' % ('%.1f' % (tris/10000)))
+    if mesh_bytes is not None and mesh_bytes >= HEAVY_FBX_BYTES:
+        reason.append('選択FBX/OBJ: %.1f MiB（テクスチャを含まないファイル容量）' % (mesh_bytes/1024**2))
+    return {'warn':bool(reason),'reason':reason,'triangles':tris,'mesh_bytes':mesh_bytes}
+
+
+def imported_triangles(shapes):
+    """Count triangles AFTER geometry import only when no early warning was possible."""
+    total=0
+    for shape in shapes:
+        try:total+=int(cmds.polyEvaluate(shape,triangle=True) or 0)
+        except (RuntimeError,ValueError,TypeError):continue
+    return total
+
+
+def _mesh_shapes(node):
+    return [s for s in (cmds.listRelatives(node,allDescendents=True,type='mesh',fullPath=True) or [])
+            if not cmds.getAttr(s+'.intermediateObject')]
+
+
+def _child_transforms(node):
+    return cmds.listRelatives(node,children=True,type='transform',fullPath=True) or []
+
+
+def _bbox(node):
+    values=cmds.exactWorldBoundingBox(node)
+    if len(values)!=6 or not all(math.isfinite(float(v)) for v in values):
+        raise ValueError('Invalid bounding box: '+node)
+    return tuple(float(x) for x in values)
+
+
+def _footprint_overlap(a,b):
+    """Fraction of the smaller horizontal bbox covered by the other bbox."""
+    x=max(0.,min(a[3],b[3])-max(a[0],b[0]))
+    z=max(0.,min(a[5],b[5])-max(a[2],b[2]))
+    aa=max(1e-6,(a[3]-a[0])*(a[5]-a[2]))
+    bb=max(1e-6,(b[3]-b[0])*(b[5]-b[2]))
+    return (x*z)/min(aa,bb)
+
+
+def standin_units(root,log):
+    """Identify independent top-level model groups; never split by mesh/material.
+
+    Avoid separating trunks from leaves when an FBX contains overlapping
+    subgroups. A flattened / combined mesh is deliberately not auto-separated.
+    """
+    parent=root
+    for _ in range(24):
+        children=[c for c in _child_transforms(parent) if _mesh_shapes(c)]
+        if len(children)!=1:break
+        # Only walk through a wrapper when it has no own mesh shapes.
+        direct=cmds.listRelatives(parent,children=True,type='mesh',fullPath=True) or []
+        if any(not cmds.getAttr(s+'.intermediateObject') for s in direct):break
+        parent=children[0]
+    children=[c for c in _child_transforms(parent) if _mesh_shapes(c)]
+    own=cmds.listRelatives(parent,children=True,type='mesh',fullPath=True) or []
+    if any(not cmds.getAttr(s+'.intermediateObject') for s in own):
+        log('ASS: direct mesh at common root; one archive is safer than splitting material parts.')
+        return [root]
+    if not 2 <= len(children) <= MAX_SPLIT_UNITS:return [root]
+    boxes=[]
+    try:
+        for child in children:boxes.append(_bbox(child))
+    except (ValueError,RuntimeError):return [root]
+    for i,aa in enumerate(boxes):
+        for bb in boxes[i+1:]:
+            # Overlapping branches/leaves are typically *parts* of one tree.
+            if _footprint_overlap(aa,bb) > .25:
+                log('ASS: overlapping FBX groups; refusing uncertain tree/branch split.')
+                return [root]
+    log('ASS: %d spatially separate model groups recognized.' % len(children))
+    return children
+
+
+def _export_ass_file(selection,dest):
+    cmds.select(selection,replace=True)
+    cmds.arnoldExportAss(filename=dest.as_posix(),selected=True,mask=24,lightLinks=0,shadowLinks=0)
+    if not dest.is_file() or dest.stat().st_size == 0:
+        raise RuntimeError('ASS export failed: '+str(dest))
+
+
+def export_standin(root,asset,log,split_mode='auto'):
+    """Export scene groups as independent ASS files, safely retaining source on failure.
+
+    Temporary translation moves each part's bbox bottom-center to world zero
+    for export; the proxy is placed back at that original pivot. Individual
+    Stand-ins can then be transformed or instanced independently.
+    """
+    if split_mode not in ('auto','single'):raise ValueError('Invalid stand-in split mode.')
+    units=standin_units(root,log) if split_mode=='auto' else [root]
+    folder=workspace_root()/'data'/'AssetBrowser'/'standins';folder.mkdir(parents=True,exist_ok=True)
+    proxies=[];exports=[]; old_sel=cmds.ls(selection=True,long=True) or []
+    try:
+        for index,unit in enumerate(units,1):
+            # Preserve existing world transform and return it even on export error.
+            matrix=cmds.xform(unit,query=True,worldSpace=True,matrix=True)
+            bbox=_bbox(unit)
+            pivot=((bbox[0]+bbox[3])*.5,bbox[1],(bbox[2]+bbox[5])*.5)
+            position=cmds.xform(unit,query=True,worldSpace=True,translation=True)
+            dest=folder/(clean_name(asset.name)+'_%02d_'%index+uuid.uuid4().hex[:8]+'.ass')
+            try:
+                cmds.xform(unit,worldSpace=True,translation=[position[i]-pivot[i] for i in range(3)])
+                _export_ass_file(unit,dest)
+                exports.append(dest)
+            except Exception:
+                if dest.exists():
+                    try:dest.unlink()
+                    except OSError:pass
+                raise
+            finally:
+                cmds.xform(unit,worldSpace=True,matrix=matrix)
+            proxy=cmds.createNode('transform',name=clean_name(asset.name)+'_%02d_StandIn'%index)
+            proxies.append(proxy)
+            shape=cmds.createNode('aiStandIn',name=clean_name(asset.name)+'_%02d_StandInShape'%index,parent=proxy)
+            cmds.setAttr(shape+'.dso',project_path(dest),type='string')
+            set_if(shape,'overrideShaders',False)
+            cmds.xform(proxy,worldSpace=True,translation=list(pivot))
+            log('ASS %d/%d: %s' % (index,len(units),dest.as_posix()))
+        if len(proxies)>1:
+            parent=cmds.group(empty=True,name=clean_name(asset.name)+'_StandIns')
+            try:cmds.parent(proxies,parent,absolute=True)
+            except Exception:cmds.delete(parent);raise
+            result=parent
+        else:result=proxies[0]
+        # Delete editable source only after *every* archive and proxy succeeds.
+        cmds.delete(root)
+        log('NOTE: ASS archives can contain absolute texture paths. Collect external dependencies before project transfer.')
+        return result
     except Exception:
-        cmds.delete(proxy); raise
-    # Only remove the actual source geometry AFTER a successful export and proxy creation.
-    cmds.delete(root)
-    log('ASS: '+dest.as_posix())
-    return proxy
+        for proxy in proxies:
+            if cmds.objExists(proxy):cmds.delete(proxy)
+        for dest in exports:
+            try:dest.unlink()
+            except OSError:pass
+        raise
+    finally:
+        try:
+            if old_sel:cmds.select([n for n in old_sel if cmds.objExists(n)],replace=True)
+            else:cmds.select(clear=True)
+        except (RuntimeError,ValueError):pass
 
 
 def selected_mesh_members(selection=None):
@@ -900,9 +1057,15 @@ def import_asset(asset,settings,choose_mapping,log):
                 setup_shape(shape,material,settings)
             if settings['copy']:
                 localize_file_nodes(set(cmds.ls(type='file',long=True) or [])-old_files,log,asset,mesh,strict=False)
+            if not settings['standin'] and not settings.get('_heavy_confirmed'):
+                tri_count=imported_triangles(selected_shapes)
+                if tri_count>=HEAVY_TRIANGLES:
+                    choice=standin_warning(settings.get('_parent'),['読み込み後の実測: 約%.1f万三角形'%(tri_count/10000)])
+                    if choice=='cancel':raise UserCancelled('Heavy model import cancelled.')
+                    if choice=='standin':settings['standin']=True
             if settings['standin']:
                 if not plans: log('WARNING: No OpenPBR assignments; exporting original material(s).')
-                try: root=export_standin(root,asset,log)
+                try: root=export_standin(root,asset,log,settings.get('standin_split','auto'))
                 except Exception as e: log('WARNING: Stand-in failed; keeping editable geometry. '+str(e))
             cmds.select(root,replace=True)
         else:
@@ -926,6 +1089,22 @@ def import_asset(asset,settings,choose_mapping,log):
             try:
                 if cmds.undoInfo(query=True,state=True): cmds.undo()
             except Exception as e: log('WARNING: Undo failed: '+str(e))
+
+def standin_warning(parent,reasons):
+    """Return standin / editable / cancel. Explicit choice, never force export."""
+    dialog=QtWidgets.QMessageBox(parent)
+    dialog.setIcon(QtWidgets.QMessageBox.Warning)
+    dialog.setWindowTitle('高負荷モデルの確認 / Arnold Stand-in')
+    dialog.setText('このモデルは重い可能性があります。\nArnold Stand-inとして取り込まなくていいですか？')
+    dialog.setInformativeText('\n'.join(reasons)+'\n\nStand-inはMayaのビューポート負荷を減らしますが、直接ポリゴン編集できなくなります。\n複数の独立した木のグループは可能な場合に個別ASS化します。')
+    yes=dialog.addButton('Stand-inで取り込む（推奨）',QtWidgets.QMessageBox.AcceptRole)
+    no=dialog.addButton('通常のメッシュで取り込む',QtWidgets.QMessageBox.DestructiveRole)
+    dialog.addButton('キャンセル',QtWidgets.QMessageBox.RejectRole)
+    dialog.setDefaultButton(yes)
+    dialog.exec() if hasattr(dialog,'exec') else dialog.exec_()
+    button=dialog.clickedButton()
+    return 'standin' if button is yes else ('editable' if button is no else 'cancel')
+
 
 # ---------------- PySide browser ----------------
 if QtWidgets is not None:
@@ -970,6 +1149,7 @@ if QtWidgets is not None:
             self.mid=QtWidgets.QDoubleSpinBox(); self.mid.setRange(-10000,10000); self.mid.setDecimals(3); self.mid.setSingleStep(0.1); self.mid.setValue(0.5); form.addRow('Height midpoint',self.mid)
             self.subdiv=QtWidgets.QSpinBox(); self.subdiv.setRange(0,5); self.subdiv.setValue(2); form.addRow('Subdiv iterations',self.subdiv)
             self.proxy=QtWidgets.QCheckBox('Import as Arnold Stand-in'); self.proxy.setChecked(False); form.addRow(self.proxy)
+            self.split_standin=QtWidgets.QCheckBox('Separate independent trees / groups into ASS'); self.split_standin.setChecked(True); self.split_standin.setToolTip('Automatically separate clearly distinct FBX groups.\nIf the FBX is flattened or its groups overlap, one ASS is exported to avoid splitting branches from leaves.'); form.addRow(self.split_standin)
             self.copy=QtWidgets.QCheckBox('Copy textures to Maya project'); self.copy.setChecked(True); form.addRow(self.copy)
             self.assign=QtWidgets.QCheckBox('Surfaces: assign to selection'); self.assign.setChecked(True); form.addRow(self.assign)
             pv.addLayout(form); self.toggle_displacement(False)
@@ -1067,6 +1247,7 @@ if QtWidgets is not None:
             self.family.blockSignals(False)
             self.import_btn.setEnabled(a is not None)
             self.family.setEnabled(bool(a and a.meshes)); self.lod.setEnabled(bool(a and a.meshes)); self.proxy.setEnabled(bool(a and a.meshes)); self.assign.setEnabled(bool(a and not a.meshes))
+            self.split_standin.setEnabled(bool(a and a.meshes))
             if a:
                 self.preview.setPixmap(self.thumbnail(a).scaled(290,150,QtCore.Qt.KeepAspectRatio,QtCore.Qt.SmoothTransformation))
                 self.asset_label.setText(a.name+'  |  '+a.source+'  |  '+a.category)
@@ -1075,7 +1256,7 @@ if QtWidgets is not None:
             self.update_details()
 
         def settings(self):
-            return dict(lod=self.lod.currentIndex(),family=self.family.currentData(),resolution=int(self.res.currentText().rstrip('K')),normal=self.normal.currentText(),displacement=self.disp.isChecked(),height=self.height.value(),mid=self.mid.value(),subdiv=self.subdiv.value(),standin=self.proxy.isChecked(),copy=self.copy.isChecked(),assign=self.assign.isChecked())
+            return dict(lod=self.lod.currentIndex(),family=self.family.currentData(),resolution=int(self.res.currentText().rstrip('K')),normal=self.normal.currentText(),displacement=self.disp.isChecked(),height=self.height.value(),mid=self.mid.value(),subdiv=self.subdiv.value(),standin=self.proxy.isChecked(),standin_split='auto' if self.split_standin.isChecked() else 'single',copy=self.copy.isChecked(),assign=self.assign.isChecked())
 
         def update_details(self,*_):
             a=self.selected()
@@ -1111,9 +1292,19 @@ if QtWidgets is not None:
         def run_import(self):
             a=self.selected()
             if not a or self._busy:return
+            settings=self.settings()
+            if not self.proxy.isChecked() and a.meshes:
+                mesh=choose_mesh(a,settings['lod'],settings['family'])
+                hint=heavy_asset_hint(a,mesh)
+                if hint['warn']:
+                    choice=standin_warning(self,hint['reason'])
+                    if choice=='cancel':return
+                    settings['_heavy_confirmed']=True
+                    if choice=='standin':settings['standin']=True; self.proxy.setChecked(True)
+            settings['_parent']=self
             self._busy=True; self.import_btn.setEnabled(False); self.log('--- '+a.name+' ---')
             try:
-                import_asset(a,self.settings(),self.mapping,self.log)
+                import_asset(a,settings,self.mapping,self.log)
                 self.log('Finished. Review warnings above.'); self.status.setText('Import finished: '+a.name)
             except UserCancelled as e:self.log(str(e))
             except Exception as e:
@@ -1531,6 +1722,22 @@ def ph_acquire(slug,meta,res,lod,cache,cancel,notify):
     repair_cache=dest.is_dir()
     marker=dest/'native_asset_info.json'
     info={}
+    if meta['type']==2 and _safe_polycount(meta.get('polycount')) is None:
+        # Reuse cached official info; avoid a network request for every import.
+        saved_count=None
+        if marker.is_file():
+            try:saved_count=_safe_polycount(json.loads(marker.read_text(encoding='utf-8')).get('polycount'))
+            except (OSError,ValueError,UnicodeError):pass
+        if saved_count is not None:
+            meta=dict(meta,polycount=saved_count)
+        else:
+            # This runs in the download worker, never on Maya's UI thread.
+            try:
+                details=ph_json(PH_API+'/info/'+quote(slug))
+                polycount=_safe_polycount(details.get('polycount'))
+                if polycount is not None:meta=dict(meta,polycount=polycount)
+            except Exception as exc:
+                notify('NOTE: Poly Haven polygon count unavailable: '+str(exc))
     if repair_cache:
         try: info=json.loads(marker.read_text(encoding='utf-8'))
         except (OSError,ValueError): pass
@@ -1542,6 +1749,9 @@ def ph_acquire(slug,meta,res,lod,cache,cancel,notify):
         manifest=info.get('map_files',[])
         complete=bool(manifest) and all(dest.joinpath(*safe_member(rel)).is_file() for rel in manifest)
         if meta['type']!=1 or (has_base and info.get('surface_schema')==PH_SURFACE_SCHEMA and complete):
+            if meta['type']==2 and _safe_polycount(meta.get('polycount')) and not _safe_polycount(info.get('polycount')):
+                info['polycount']=_safe_polycount(meta['polycount'])
+                atomic_json(marker,info)
             notify('Cache hit: '+a.name); return a
         notify('Updating surface cache to current map schema: '+slug)
     notify('Fetching file list: '+slug)
@@ -1554,7 +1764,7 @@ def ph_acquire(slug,meta,res,lod,cache,cancel,notify):
         url_roles={m['url']:ph_root_role(root) for root,value in tree.items() if ph_root_role(root) for _,m in ph_leaves(value)}
         map_roles={rel:[url_roles[m['url']],normalized(slug)] for rel,m in full_plan if m['url'] in url_roles}
         info.update(surface_schema=PH_SURFACE_SCHEMA,map_files=[rel for rel,_ in full_plan],map_roles=map_roles)
-    info.update(name=meta.get('name',slug),source='Poly Haven',category=meta.get('category',''),slug=slug,requested_resolution=res,requested_lod=lod)
+    info.update(name=meta.get('name',slug),source='Poly Haven',category=meta.get('category',''),slug=slug,requested_resolution=res,requested_lod=lod,polycount=_safe_polycount(meta.get('polycount')))
     plan=full_plan
     if repair_cache:
         def good(rel,m):
@@ -1691,7 +1901,7 @@ if QtWidgets is not None:
         def __init__(self,parent=None):
             self.native_ready=False
             super(NativeBrowser,self).__init__(parent)
-            self.setObjectName('PolyHavenAssetBrowserV51'); self.setWindowTitle('PolyHaven Asset Browser | 5.2')
+            self.setObjectName('PolyHavenAssetBrowserV51'); self.setWindowTitle('PolyHaven Asset Browser | 5.3')
             self.resize(1220,870)
             self.cache=Path(cmds.internalVar(userAppDir=True))/'NativeAssetBrowser'
             (self.cache/'PolyHaven').mkdir(parents=True,exist_ok=True)
@@ -1799,7 +2009,7 @@ if QtWidgets is not None:
                 super(NativeBrowser,self).on_selected(*args); self.import_btn.setText('IMPORT / CREATE OPENPBR'); return
             slug=self.online_slug(); m=self.catalog.get(slug,{})
             self.family.blockSignals(True); self.family.clear(); self.family.addItem('Auto (FBX)',None); self.family.blockSignals(False); self.family.setEnabled(False)
-            is_model=m.get('type')==2; self.lod.setEnabled(is_model); self.proxy.setEnabled(is_model); self.assign.setEnabled(m.get('type')==1)
+            is_model=m.get('type')==2; self.lod.setEnabled(is_model); self.proxy.setEnabled(is_model); self.assign.setEnabled(m.get('type')==1); self.split_standin.setEnabled(is_model)
             enabled=bool(slug) and not self.jobs and not self._busy
             self.import_btn.setText('DOWNLOAD & CREATE SKYDOME' if self.hdri_mode() else 'DOWNLOAD & IMPORT'); self.import_btn.setEnabled(enabled); self.cache_btn.setEnabled(enabled)
             self.asset_label.setText(m.get('name','Select a Poly Haven asset'))
@@ -1871,7 +2081,16 @@ if QtWidgets is not None:
             if auto and self.catalog[slug]['type']==1 and self.assign.isChecked() and not selected_mesh_members()[0]:
                 QtWidgets.QMessageBox.warning(self,'マテリアルアサイン先の確認',SELECTION_REQUIRED); return
             if auto and not confirm_project_copy(self, self.hdri_mode() or self.copy.isChecked()):return
-            s=self.snapshot_settings(); self.cancel=threading.Event()
+            s=self.snapshot_settings()
+            if auto and self.catalog[slug]['type']==2 and not s['standin']:
+                hint=heavy_asset_hint(catalog_meta=self.catalog[slug])
+                if hint['warn']:
+                    choice=standin_warning(self,hint['reason'])
+                    if choice=='cancel':return
+                    s['_heavy_confirmed']=True
+                    if choice=='standin':s['standin']=True; self.proxy.setChecked(True)
+            s['_parent']=self
+            self.cancel=threading.Event()
             if self.catalog[slug]['type']==0:
                 self.jobs.append(('hdri',self.pool.submit(ph_acquire_hdri,slug,self.catalog[slug],s['hdri_res'],self.cache,self.cancel,self.messages.put),s,auto))
             else:self.jobs.append(('poly',self.pool.submit(ph_acquire,slug,self.catalog[slug],s['resolution'],s['lod'],self.cache,self.cancel,self.messages.put),s,auto))
@@ -1881,6 +2100,15 @@ if QtWidgets is not None:
 
         def import_ready(self,a,s):
             if self._busy:return
+            if not s['standin'] and not s.get('_heavy_confirmed') and a.meshes:
+                mesh=choose_mesh(a,s['lod'],s.get('family'))
+                hint=heavy_asset_hint(a,mesh)
+                if hint['warn']:
+                    choice=standin_warning(self,hint['reason'])
+                    if choice=='cancel':return
+                    s['_heavy_confirmed']=True
+                    if choice=='standin':s['standin']=True; self.proxy.setChecked(True)
+            s['_parent']=self
             self._busy=True; self.import_btn.setEnabled(False)
             try:import_asset(a,s,self.mapping,self.log); self.log('Import finished: '+a.name)
             except SelectionRequiredError as e:self.log(str(e)); QtWidgets.QMessageBox.warning(self,'マテリアルアサイン先の確認',str(e))

@@ -1,4 +1,4 @@
-# PolyHaven Asset Browser v5.2
+# PolyHaven Asset Browser v5.3
 
 [← nTools トップへ戻る](../../README.md)
 
@@ -69,10 +69,36 @@ Mayaで **File → Set Project** を実行し、シーンを保存します。Ar
 | Normal convention | Auto (file name)。必要に応じOpenGL / DirectX。 |
 | Enable Displacement | OFF。高さ、Height midpoint、Subdiv iterationsを調整。 |
 | Import as Arnold Stand-in | OFF。対応モデルをArnoldのASSに書き出してスタンドイン化する。 |
+| Separate independent trees / groups into ASS | ON。独立グループが明確ならASSを個別書き出し。不明な場合は1つにまとめる。 |
 | Copy textures to Maya project | ON。テクスチャをプロジェクト内へコピーする。 |
 | Surfaces: assign to selection | ON。サーフェス素材を選択メッシュに割り当てる。 |
 
-## 7. 保存とトラブル対処
+## 7. 重いモデルの警告と複数ASS化（v5.3）
+
+### 取り込み前の高負荷チェック
+
+`Import as Arnold Stand-in` がOFFのとき、次の場合には確認ウィンドウを表示します。
+
+- Poly Haven公式の掲載ポリゴン数が **50万三角形以上**（高精細LOD等、アセット全体の掲載値であり、現在選択したLODの実測値とは限りません）
+- 選択したFBX/OBJのファイル容量が **100 MiB以上**（テクスチャ込みのダウンロード容量ではありません）
+- 事前に上記を把握できなかった場合、Mayaへの読み込み後の実測三角形数が **50万以上**
+
+確認画面には「Stand-inで取り込む（推奨）」「通常のメッシュで取り込む」「キャンセル」があります。**自動的に選択を変更することはありません。** オンラインアセットでは必要に応じてダウンロード完了後・Maya読み込み前に警告が表示されます。
+
+### 複数の木を個別ASSへ
+
+`Import as Arnold Stand-in` がONの場合は、初期ONの `Separate independent trees / groups into ASS` を利用できます。
+
+- FBX内で木がそれぞれ**独立したオブジェクトグループ**に分かれており、グループ間の水平範囲が十分に離れていれば、グループごとに `.ass` を書き出し、個々の `aiStandIn` を生成します。ルートグループにまとまり、Outlinerで個別に移動できます。
+- スタンドインのローカル原点は原則として各グループのバウンディングボックスの**底面中央**に配置します。各木を移動・MASHインスタンス化するための起点に利用できます。
+- ツリーの**幹・枝・葉が別のグループ**になっていたり、複数の木が**単一メッシュに結合**されていたりして、木ごとの単位を安全に判定できない場合は、誤ったASSを作らず**1つにまとめます**。必ずしも画像に見える木の本数とASSの個数が一致するわけではありません。
+- 自動分割を使いたくない場合は `Separate independent trees / groups into ASS` をOFFにします。1つのASSにまとめて書き出します。
+
+ASS書き出しが失敗した場合は、編集可能な元メッシュを保持し、作成途中のプロキシとASSを可能な範囲で除去します。複数のASS化は**Arnold標準の選択書き出し**を使用しています。複数プロキシのシェーダ・配置・表示と、MASHへの登録はMaya 2027実機で必ず確認してください。
+
+例：[Fir Sapling Medium（Poly Haven）](https://polyhaven.com/a/fir_sapling_medium) は公式データで約231万三角形の高精細モデルです。LOD1などでは実際の負荷が下がる可能性があります。元FBXが木ごとのグループに分かれているかどうかを確認してください。テクスチャの絶対パスがASS内部に残る場合は別PCでのレンダリング前に修復してください。
+
+## 8. 保存とトラブル対処
 
 - モデル等のキャッシュはMayaユーザーアプリディレクトリの `NativeAssetBrowser/PolyHaven/` を使用します。`Open Cache` で開けます。
 - コピーをONにしたテクスチャはプロジェクトのsourceimages内 `AssetBrowser/` に保存されます。スタンドインは `data/AssetBrowser/standins/` に保存されます。シーンだけでなく、必要なプロジェクトファイルも提出・移動してください。

@@ -1,4 +1,4 @@
-# nTools v1.0.13
+# nTools v1.0.14
 
 Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
@@ -14,12 +14,14 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 | アイコン | ツール・操作マニュアル | バージョン | 機能 |
 |---|---|---|---|
 | [![SF](scripts/ntools/icons/sketchfab.png)](docs/tools/sketchfab.md) | [Sketchfab Asset Browser](docs/tools/sketchfab.md) | 1.3 | 静的glTFモデル、Specular-Glossiness自動変換、OpenPBR |
-| [![PH](scripts/ntools/icons/polyhaven.png)](docs/tools/polyhaven.md) | [PolyHaven Asset Browser](docs/tools/polyhaven.md) | 5.2 | モデル・テクスチャ・HDRI、ローカルライブラリ |
+| [![PH](scripts/ntools/icons/polyhaven.png)](docs/tools/polyhaven.md) | [PolyHaven Asset Browser](docs/tools/polyhaven.md) | 5.3 | 重いモデルの警告・木ごとのASS自動分割、モデル・HDRI・ローカルライブラリ |
 | [![CITY](scripts/ntools/icons/city.png)](docs/tools/city_builder.md) | [Maya City Builder](docs/tools/city_builder.md) | 2.4.1 | OSM / PLATEAU / Procedural / 日本風の街並み生成 |
 | [![MAT](scripts/ntools/icons/material.png)](docs/tools/material_creator.md) | [Material Creator](docs/tools/material_creator.md) | 1.3 | ローカルテクスチャ / JSONからOpenPBR作成 |
 | [![RIG](scripts/ntools/icons/quadruped.png)](docs/tools/quadruped.md) | [Quadruped Quick Rig](docs/tools/quadruped.md) | 2.4.0 | 四足ガイド、IK/FK、試験的なリターゲット |
 | [![集合！](scripts/ntools/icons/collector.png)](docs/tools/data_collector.md) | [データ集合ツール / Data Collector](docs/tools/data_collector.md) | 1.1 | プロジェクト外のテクスチャ・キャッシュ・参照シーン等をコピーして再リンク |
 
+
+> **v1.0.14: PolyHaven v5.3** — 高負荷アセット（Poly Havenの掲載ポリゴン数50万以上、またはFBX/OBJ本体100 MiB以上）にStand-in推奨の確認を表示します。チェックがOFFでも自動変更せず選択できます。Arnold Stand-in書き出し時、独立して配置されたFBXオブジェクトグループを判定できた場合は個別のASSとプロキシに分離します。グループが重なる場合や1メッシュに結合されたデータは誤分割を避け1つのASSにします。Maya 2027での実機検証が必要です。
 
 > **v1.0.13: データ集合ツール再スキャン修正** — 再スキャン時にウィンドウ全体を閉じず、一覧だけを更新します。未登録のUSDノードタイプの照会をスキップして警告を抑制し、チェック状態も保持します。実機での確認は必要です。
 
