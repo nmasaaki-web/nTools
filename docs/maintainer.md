@@ -1,4 +1,4 @@
-# nTools 管理者向けガイド v1.0.9
+# nTools 管理者向けガイド v1.0.11
 
 ## 公開・移行
 
@@ -6,7 +6,7 @@ ZIPの中身を既存のGit作業フォルダに上書きコピーする。`.git
 
 ```bash
 git add .
-git commit -m "Release nTools v1.0.9 - Installer consent"
+git commit -m "Release nTools v1.0.11 - Live tool update"
 git push
 ```
 
@@ -37,14 +37,26 @@ v1.0.0〜1.0.2から移行する場合は、旧Updateを使用せず、新ZIPの
 
 - 1.0.9: インストール確認をQtの同意ダイアログに変更。READMEの免責全文をオフライン表示し、未同意では本体導入・シェルフ登録を実行しない。通常Updateは変更なし。READMEの免責を改訂する際はinstall.pyのINSTALL_NOTICEも同期してrelease.pyを実行する。
 
+- 1.0.10: SketchfabにKHR_materials_pbrSpecularGlossiness対応を追加。
+- 1.0.11: Update時の一律再起動要求を廃止。変更されたモジュールが未使用か終了済みであることを確認し、パッケージ置換後のdeferredコールバックで管理モジュールを再読み込み、変更されたツールモジュールのみimportキャッシュから取り除く。次回ボタン押下時に新しいコードが読み込まれる。処理中や開いているツールウィンドウがあれば、ファイルの更新前に中止して閉じるよう案内。読み込みの切替失敗は安全側に倒して再起動要求。初回導入は従来どおり再起動不要。旧v1.0.10からの最初の更新だけは旧Updaterの仕様上、再起動が必要。
+
+### Live update 実機検証
+
+1. v1.0.11をインストールした検証用Mayaで、全ツールを閉じた状態から次の更新版を配信し、Update 1回後に再起動せずツールが新コードで起動することを確認。
+2. SketchfabまたはPolyHavenを開いた状態でそのツールのコードを変更した更新を配信し、Updateがファイル置換前に中止してウィンドウを閉じるよう案内することを確認。
+3. City Builderで処理中のUpdateは中止され、処理が完了してウィンドウを閉じてからのUpdateに成功することを確認。
+4. Quadruped Quick Rigを閉じてUpdateし、次のRIGボタン1回でウィンドウが1つだけ起動することを確認。
+5. 最新版のUpdateではファイルを置換せず、通常のシェルフ同期のみ行われること、Fileメニューと他シェルフが再起動後も正常であることを確認。
+6. v1.0.10からv1.0.11への最初の更新は、旧Updaterが再起動を求めることを確認。その再起動後のv1.0.11からは上記の仕様を検証。
+
 ## 次のリリース
 
 ツール本体を `scripts/ntools/tools/` 内の該当ファイルで上書きする。必要に応じ `release.py` のTOOLSリストでバージョン、説明等を修正する。アイコンは `scripts/ntools/icons/` に配置。配布に含めるファイルのハッシュを生成する：
 
 ```bash
-python release.py 1.0.9
+python release.py 1.0.11
 git add .
-git commit -m "Release nTools v1.0.9"
+git commit -m "Release nTools v1.0.11"
 git push
 ```
 

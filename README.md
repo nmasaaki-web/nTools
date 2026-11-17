@@ -1,4 +1,4 @@
-# nTools v1.0.10
+# nTools v1.0.11
 
 Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
@@ -18,6 +18,9 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 | [![CITY](scripts/ntools/icons/city.png)](docs/tools/city_builder.md) | [Maya City Builder](docs/tools/city_builder.md) | 2.4.1 | OSM / PLATEAU / Procedural / 日本風の街並み生成 |
 | [![MAT](scripts/ntools/icons/material.png)](docs/tools/material_creator.md) | [Material Creator](docs/tools/material_creator.md) | 1.3 | ローカルテクスチャ / JSONからOpenPBR作成 |
 | [![RIG](scripts/ntools/icons/quadruped.png)](docs/tools/quadruped.md) | [Quadruped Quick Rig](docs/tools/quadruped.md) | 2.4.0 | 四足ガイド、IK/FK、試験的なリターゲット |
+
+
+> **v1.0.11: 原則再起動不要のUpdate** — 未使用・終了済みのツールのPythonコードは更新後に再読込でき、Mayaを閉じずに最新版を使用できます。更新対象のツールウィンドウやバックグラウンド処理が動いている場合、更新を行わず終了を案内します。安全に読み込みを切り替えられなかった場合のみ再起動が必要です。**v1.0.10以前から初めてv1.0.11へ更新する場合、旧Updaterが再起動フラグを立てるため、一度だけMayaの再起動が必要です。**
 
 > v1.0.10ではSketchfab Asset Browser v1.3を収録し、Specular-GlossinessからMetallic-Roughnessへの変換に対応しました（テクスチャ・透明度を含む）。全glTF拡張に対応するわけではありません。
 
@@ -60,7 +63,7 @@ from ntools import installer as nt
 nt.manage()
 ```
 
-- **Update**：GitHub mainの新しいバージョンを確認して本体を更新。最新版の場合も既存シェルフを確認し、既知の構成なら不足するCity Builder / Help / UninstallとSeparatorを追加して順序を整える。シェルフ全体は再構築しない。本体が更新された場合のみ再起動が必要。
+- **Update**：GitHub mainの新しいバージョンを確認して本体を更新。最新版の場合も既存シェルフを確認し、既知の構成なら不足するCity Builder / Help / UninstallとSeparatorを追加して順序を整える。シェルフ全体は再構築しない。v1.0.11以降は更新対象のツールが閉じていれば、原則として再起動不要。実行中ならファイル置換前に中止して終了後の再実行を案内し、Python切替失敗時だけ再起動を求める。
 - **Repair Shelf**：シェルフが存在しないときにだけ登録。既存タブは変更しない。既存のタブを作り直したい場合はMaya標準のShelf EditorでnToolsのみを削除・保存し、再起動してからRepair Shelf。既存のシェルフファイルが残っている場合は安全のため中止する。
 - **Add Help Button**：管理用の手動同期（通常はUpdateで不要）。CITYをMATの左に追加し、RIG → Separator → Help → Uninstall → Updateの順にする。元の4ツールと他のシェルフは変更しない。
 - **Add Uninstall Button**：旧管理メニューとの互換用。Add Help Buttonと同じ管理ボタン同期を行う。
@@ -68,7 +71,7 @@ nt.manage()
 
 Updateは本体更新に加え、必要な場合だけCity Builder・管理ボタン・Separatorを同期します。Uninstallは2段階の案内方式です。
 
-初回導入で既存の本体がない場合は再起動不要です。既存本体の更新・アンインストール後は、旧モジュールが残るため再起動が必要です。
+初回導入では再起動不要です。v1.0.11以降の更新では未使用のツールを読み込み直すため原則再起動不要です。通信・生成処理中のツールは閉じてからUpdateを再実行してください。旧v1.0.10以前からの初回移行時、および安全なコード切替に失敗した場合、アンインストール後は再起動が必要です。
 
 本体削除用コード（案内ウィンドウのコピー内容）：
 
@@ -88,7 +91,7 @@ nt.uninstall()
 2. 本体更新後、Mayaを再起動する。旧版の更新処理はCITYの追加を知らないため、シェルフ構成不一致と表示されることがある。本体更新が完了していれば再起動後のUpdateで移行できる。
 3. **Updateをもう一度押す。** 本体が最新版でも不足するCity Builder・管理ボタン・Separatorを確認・追加する。SF → PH → CITY → MAT → RIG → Separator → Help → Uninstall → Updateの順になる。この操作だけなら再起動不要。
 
-既にv1.0.8以降を読み込んでいる場合、Updateの1回の操作で本体更新とシェルフの同期を行う。新規導入は最初から8ボタンと1個のSeparatorを登録する。
+既にv1.0.8以降を読み込んでいる場合、Updateの1回の操作で本体更新とシェルフの同期を行う。ただしv1.0.10以前のUpdaterを実行してv1.0.11に移行する最初の1回は、旧Updaterの仕様上再起動が必要。新規導入は最初から8ボタンと1個のSeparatorを登録する。
 
 カスタムボタンや未知のツール構成がある場合、自動同期を中止して本体を保持する。今回のCity Builder追加のみ自動移行対象。未知のツール追加・削除は対象外。
 

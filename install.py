@@ -25,7 +25,7 @@ SHELF = 'nTools'
 PACKAGE = 'ntools'
 MAX_BYTES = 32 * 1024 * 1024
 _RESTART_REQUIRED = False
-INSTALLER_VERSION = '1.0.10'
+INSTALLER_VERSION = '1.0.11'
 _SEPARATOR = '<ntools:shelf-separator>'
 _SHELF_SAVE_PENDING = False
 _UPDATE_BUSY = False
@@ -648,6 +648,142 @@ def launch(ident):
         cmds.confirmDialog(title='nTools - Error',message=str(exc),button=['OK'])
 
 
+
+# Live-update policy: do not reload code while its Maya/Qt window or a background
+# job is running. Never delete/rebuild any shelf or alter Maya.env/userSetup.
+def _changed_tool_modules(old, new):
+    """Fully qualified Python module names whose source bytes have changed."""
+    old_files = old.get('files', {}) if old else {}
+    new_files = new.get('files', {})
+    names = set()
+    for item in list(old.get('tools', []) if old else []) + list(new.get('tools', [])):
+        module = item['module']
+        path = 'scripts/ntools/tools/' + module + '.py'
+        if old_files.get(path) != new_files.get(path):
+            names.add('ntools.tools.' + module)
+    return names
+
+
+def _window_visible(widget):
+    if widget is None:
+        return False
+    try:
+        return bool(widget.isVisible())
+    except (RuntimeError, ReferenceError, AttributeError):
+        return False
+
+
+def _executor_busy(executor):
+    """Conservative guard for shutdown(wait=False) executors after a Qt close."""
+    if executor is None:
+        return False
+    threads = getattr(executor, '_threads', ())
+    return any(getattr(thread, 'is_alive', lambda: False)() for thread in threads)
+
+
+def _hot_update_blockers(changed):
+    """Check only loaded tool modules with changed source, before replacing files.
+
+    A running tool is never killed or reloaded. The user can close its window,
+    wait for its workers, and click Update again. An indeterminate state fails
+    closed, since restarting is safer than corrupting an in-progress Maya task.
+    """
+    blockers = []
+    cmds, _ = _maya()
+    for name in sorted(changed):
+        module = sys.modules.get(name)
+        if module is None:
+            continue
+        short = name.rsplit('.', 1)[-1]
+        try:
+            if short == 'maya_city_builder':
+                obj = getattr(module, '_maya_city_builder', None)
+                if obj is not None:
+                    worker = getattr(obj, 'worker_thread', None)
+                    if getattr(obj, 'busy', False) or (worker is not None and worker.is_alive()):
+                        blockers.append('City Builder: 街並み生成・ダウンロード中')
+                    elif cmds.window(obj.win, exists=True):
+                        blockers.append('City Builder: ウィンドウを閉じてください')
+                    # Orphaned local map servers are closed only *after* the
+                    # user confirms Update, not during this read-only check.
+                continue
+            if short == 'quadruped_quick_rig':
+                if cmds.window(getattr(module, 'WIN', 'QQR2027_v24_WIN'), exists=True):
+                    blockers.append('Quadruped Quick Rig: ウィンドウを閉じてください')
+                continue
+            if short == 'sketchfab_asset_browser':
+                obj = getattr(module, '_browser', None)
+                if _window_visible(obj):
+                    blockers.append('Sketchfab: ウィンドウを閉じてください')
+                elif obj is not None and any(_executor_busy(getattr(obj, key, None))
+                                            for key in ('grid_pool','detail_pool','search_pool')):
+                    blockers.append('Sketchfab: 通信処理の終了を待ってください')
+                continue
+            if short == 'polyhaven_asset_browser':
+                obj = getattr(module, '_NATIVE_WINDOW', None)
+                if _window_visible(obj):
+                    blockers.append('PolyHaven: ウィンドウを閉じてください')
+                elif obj is not None and (getattr(obj, '_busy', False) or getattr(obj, 'jobs', None)
+                                           or _executor_busy(getattr(obj, 'pool', None))
+                                           or _executor_busy(getattr(obj, 'thumb_pool', None))):
+                    blockers.append('PolyHaven: ダウンロード・検索の終了を待ってください')
+                continue
+            if short == 'material_creator':
+                obj = getattr(module, '_WINDOW', None)
+                if _window_visible(obj) or (obj is not None and getattr(obj, '_busy', False)):
+                    blockers.append('Material Creator: ウィンドウと処理を閉じてください')
+                continue
+            blockers.append(name + ': 実行状態を確認できません')
+        except Exception as exc:
+            blockers.append(name + ': 状態確認エラー (' + str(exc)[:100] + ')')
+    return blockers
+
+
+def _quiesce_closed_tools(changed):
+    """Stop a City Builder localhost map server after the user accepts Update.
+
+    This does not touch the Maya scene or UI. The update preflight has already
+    rejected an open City Builder window or an active city generation worker.
+    """
+    name='ntools.tools.maya_city_builder'
+    if name not in changed: return
+    module=sys.modules.get(name)
+    obj=getattr(module,'_maya_city_builder',None) if module is not None else None
+    if obj is not None and getattr(obj,'server',None) is not None:
+        obj.dispose()
+
+
+def _activate_runtime(changed):
+    """Deferred hot activation after a complete, SHA-256-verified file swap.
+
+    Evict *only* replaced, idle tool modules. They are imported again from the
+    updated on-disk package by launch(); this avoids reloading Qt classes
+    under live widgets, and avoids the quadruped tool's import-time UI twice.
+    Reload the installer in place so existing shelf commands invoke new code.
+    """
+    importlib.invalidate_caches()
+    for name in sorted(changed):
+        if name in sys.modules:
+            del sys.modules[name]
+        parent, child = name.rsplit('.', 1)
+        pkg = sys.modules.get(parent)
+        if pkg is not None and hasattr(pkg, child):
+            delattr(pkg, child)
+    manager = sys.modules.get('ntools.installer')
+    if manager is not None:
+        manager = importlib.reload(manager)
+    return manager
+
+
+def _restart_fallback(exc):
+    # A rare cache/Qt exception can still require a restart. Do not keep
+    # launching stale modules after an incomplete in-memory activation.
+    sys._ntools_restart_required = True
+    traceback.print_exc()
+    return ('ファイル更新は完了しましたが、Maya内のコード切替に失敗しました。'
+            '現在のシーンを保存し、Mayaを再起動してください。\n原因: '+str(exc))
+
+
 def _apply(m,payload):
     """File transaction only. Never access or mutate Maya UI here."""
     dest=_target(); dest.parent.mkdir(parents=True,exist_ok=True)
@@ -671,7 +807,8 @@ def _apply(m,payload):
         if stage.exists(): shutil.rmtree(stage,ignore_errors=True)
     # Keep all backups; never prune directories that could contain user data.
     if moved: print('nTools previous package:', backup)
-    if old is not None: sys._ntools_restart_required=True
+    # The package is now on disk; _activate_runtime() updates the interpreter
+    # in a deferred, safe stage. Never force a restart just for replacing files.
     return old is not None
 
 
@@ -773,71 +910,110 @@ def install(source=None):
         if old is None: msg+='\n初回導入は再起動不要です。'
         choice=_install_consent(msg)
         if choice not in ('Install + Shelf','Files Only'):return
-        restart=_apply(m,payload)
+        changed=_changed_tool_modules(old,m)
+        blockers=_hot_update_blockers(changed)
+        if blockers:
+            raise RuntimeError('使用中のツールがあるため導入を中止しました。閉じてから再実行してください。\n'+'\n'.join(blockers))
+        _quiesce_closed_tools(changed)
+        updated=_apply(m,payload)
+        runtime_note=''
+        if updated:
+            try: _activate_runtime(changed)
+            except Exception as exc: runtime_note='\n'+_restart_fallback(exc)
         if not exists and choice=='Install + Shelf':
             try: register_shelf(m)
             except Exception as exc:
                 traceback.print_exc(); _notify('本体の導入は完了しましたが、シェルフ登録を中止しました。\n'+str(exc)+'\nMayaのUIを確認後、Repair Shelfを実行してください。');return
-        note='既存の本体を更新したため、Mayaを再起動してください。' if restart else '再起動は不要です。nTools シェルフを選ぶと、今すぐ使用できます。'
+        note=('既存の本体を更新しました。再起動せずに使用できます。' if updated and not runtime_note
+              else '再起動は不要です。nTools シェルフを選ぶと、今すぐ使用できます。')
         if not exists and choice=='Files Only':
             note='本体のみ導入しました。管理画面のRepair Shelfでシェルフを登録してください。'
-            note+='\n既存の本体を更新したため、先にMayaを再起動してください。' if restart else '\n初回導入は再起動不要です。'
+        note+=runtime_note
         if exists and choice=='Install + Shelf':
             try: note+='\n'+_sync_management_buttons(m)
             except Exception as exc:
                 traceback.print_exc(); note+='\n本体は導入済みですが、シェルフの同期は中止しました：\n'+str(exc)
-        if exists and choice=='Files Only': note+='\n既存のシェルフは変更していません。再起動後、Updateで管理ボタンとSeparatorを確認できます。'
+        if exists and choice=='Files Only': note+='\n既存のシェルフは変更していません。Updateで管理ボタンとSeparatorを確認できます。'
         _notify('インストール完了！ nTools '+m['version']+'\n'+note)
     except Exception as exc:
         traceback.print_exc();_notify('インストール失敗：\n'+str(exc)+'\n詳細は Script Editor を確認してください。')
 
 
 def update():
-    """Update package and synchronize the known City Builder and management buttons.
+    """One-click update: verified files + safe hot activation + shelf migration.
 
-    Old v1.0.3–1.0.5 updaters cannot run this new code until restart. On the
-    next click, even an already-current manifest triggers shelf sync.
+    The live tool window or background job must be closed before replacing
+    that tool's code. Never reload classes under a running Maya/Qt widget.
+    Only a failed runtime activation (or an updater older than 1.0.11) requires
+    restarting Maya. Shelf changes are still deferred past the click callback.
     """
     global _UPDATE_BUSY
     if _UPDATE_BUSY: return
-    if getattr(sys,'_ntools_restart_required',False):
-        _notify('先にMayaを再起動してください。'); return
+    if getattr(sys, '_ntools_restart_required', False):
+        _notify('前回のコード切替が完了していません。Mayaを再起動してください。'); return
     _UPDATE_BUSY = True
     scheduled = False
     try:
         old = _installed()
         if old is None: raise RuntimeError('nTools is not installed. Run install.py again.')
-        # Check Maya before network/file changes, especially legacy bad tabs.
         _ui_snapshot()
-        m,payload = _online()
+        m, payload = _online()
         newer = _version(m['version']) > _version(old['version'])
+        changed = _changed_tool_modules(old, m) if newer else set()
         if newer:
-            if not _confirm('nTools '+old['version']+' → '+m['version']+'\n本体を更新し、不足するCity Builder・管理ボタン・Separatorがあれば追加します。\nシェルフは削除・再構築しません。シーンを保存し、ツールの作業を終えてください。\n本体更新後はMayaの再起動が必要です。','Update'): return
-            _apply(m,payload)
-            title = '更新完了：nTools '+m['version']+'\n本体の反映にはMayaを再起動してください。'
+            blockers = _hot_update_blockers(changed)
+            if blockers:
+                _notify('更新はまだ行っていません。次のウィンドウ・処理を終了してからUpdateを再実行してください。\n\n'
+                        +'\n'.join(blockers)+'\n\n通常はMaya全体の再起動は不要です。')
+                return
+            if not _confirm('nTools '+old['version']+' → '+m['version']
+                            +'\n更新前にシーンを保存してください。使用中のツールがなければ再起動せずに切り替えます。'
+                            +'\n既存シェルフは削除せず、不足する管理ボタンだけを追加します。', 'Update'):
+                return
+            _quiesce_closed_tools(changed)
+            _apply(m, payload)
+            title = '更新完了：nTools '+m['version']
         else:
-            title = ('現在の nTools '+old['version']+' は最新版です。' if m['version']==old['version'] else '現在の nTools '+old['version']+' はGitHub版より新しいため、本体は変更しません。')
+            title = ('現在の nTools '+old['version']+' は最新版です。' if m['version']==old['version']
+                     else '現在の nTools '+old['version']+' はGitHub版より新しいため、本体は変更しません。')
         def finish():
             global _UPDATE_BUSY
             try:
-                # Re-read installed metadata after the file transaction; the
-                # currently executing updater may be an older in-memory module.
-                message = _sync_management_buttons(_installed())
-                _notify(title+'\n'+message)
+                runtime_message=''
+                if newer:
+                    try:
+                        manager=_activate_runtime(changed)
+                        # Existing shelf command imports `ntools.installer`,
+                        # which has now been refreshed without changing the tab.
+                        runtime_message='\nMayaの再起動は不要です。更新後のツールをそのまま起動できます。'
+                    except Exception as exc:
+                        manager=None
+                        runtime_message='\n'+_restart_fallback(exc)
+                else:
+                    manager=None
+                # New code can also handle any future shelf layout migrations.
+                current = manager if manager is not None else sys.modules.get('ntools.installer')
+                sync = current._sync_management_buttons if current is not None else _sync_management_buttons
+                installed = current._installed() if current is not None else _installed()
+                try:
+                    message = sync(installed)
+                except Exception as exc:
+                    traceback.print_exc()
+                    message = 'シェルフ同期は中止しました：\n'+str(exc)
+                _notify(title+runtime_message+'\n'+message)
             except Exception as exc:
                 traceback.print_exc()
-                _notify(title+'\nシェルフの同期は中止しました：\n'+str(exc))
+                _notify('更新後の確認で問題が発生しました：\n'+str(exc))
             finally:
-                _UPDATE_BUSY = False
-        # Let the original shelf button callback finish before moving buttons.
-        # The deferred callable is not stored as a shelf command.
-        cmds,_ = _maya()
+                _UPDATE_BUSY=False
+        cmds, _ = _maya()
         cmds.evalDeferred(finish)
         scheduled = True
     except Exception as exc:
-        traceback.print_exc(); _notify('更新失敗：\n'+str(exc)+'\n詳細は Script Editor を確認してください。')
+        traceback.print_exc()
+        _notify('更新失敗：\n'+str(exc)+'\n詳細は Script Editor を確認してください。')
     finally:
-        if not scheduled: _UPDATE_BUSY = False
+        if not scheduled: _UPDATE_BUSY=False
 
 
 def onMayaDroppedPythonFile(*args):
