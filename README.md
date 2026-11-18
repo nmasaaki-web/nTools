@@ -1,4 +1,4 @@
-# nTools v1.0.21
+# nTools v1.0.22
 
 Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
@@ -18,8 +18,10 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 | [![CITY](scripts/ntools/icons/city.png)](docs/tools/city_builder.md) | [Maya City Builder](docs/tools/city_builder.md) | 2.4.1 | OSM / PLATEAU / Procedural / 日本風の街並み生成 |
 | [![MAT](scripts/ntools/icons/material.png)](docs/tools/material_creator.md) | [Material Creator](docs/tools/material_creator.md) | 1.3 | ローカルテクスチャ / JSONからOpenPBR作成 |
 | [![RIG](scripts/ntools/icons/quadruped.png)](docs/tools/quadruped.md) | [Quadruped Quick Rig](docs/tools/quadruped.md) | 2.4.0 | 四足ガイド、IK/FK、試験的なリターゲット |
-| [![集合！](scripts/ntools/icons/collector.png)](docs/tools/data_collector.md) | [データ集合ツール / Data Collector](docs/tools/data_collector.md) | 1.1 | プロジェクト外のテクスチャ・キャッシュ・参照シーン等をコピーして再リンク |
+| [![集合！](scripts/ntools/icons/collector_whistle.png)](docs/tools/data_collector.md) | [データ集合ツール / Data Collector](docs/tools/data_collector.md) | 1.1 | プロジェクト外のテクスチャ・キャッシュ・参照シーン等をコピーして再リンク |
 
+
+> **v1.0.22: ワンクリックアンインストール** — UninstallボタンからMaya標準のシェルフ削除確認を表示し、削除を承認した場合のみnTools本体をバックアップに移動します。コードのコピー、Shelf Editor、手動の再起動前操作は不要です。対象ツールのウィンドウや通信処理が動いている場合、または不明なシェルフ項目がある場合は削除を中止します。完了後はMayaを再起動してください。Maya標準の確認画面はOSと言語設定により文言が異なることがあります。
 
 > **v1.0.21: PolyHaven v5.4.5 / 集合アイコン更新** — ASS書き出し前のマテリアル確認で、「編集可能メッシュで保持（推奨）」の表示を「編集可能メッシュで保持」に変更。実行の選択肢や動作は変更していません。データ集合ツールのアイコンから「集合！」の重複文字を削除し、ホイッスルを大きく配置しました。Update時に既存の集合ボタンの画像だけを更新し、他のシェルフボタンは再作成しません。
 
@@ -84,21 +86,11 @@ nt.manage()
 - **Repair Shelf**：シェルフが存在しないときにだけ登録。既存タブは変更しない。既存のタブを作り直したい場合はMaya標準のShelf EditorでnToolsのみを削除・保存し、再起動してからRepair Shelf。既存のシェルフファイルが残っている場合は安全のため中止する。
 - **Add Help Button**：管理用の手動同期（通常はUpdateで不要）。CITYをMATの左に追加し、RIG → Separator → Help → Uninstall → Updateの順にする。元の4ツールと他のシェルフは変更しない。
 - **Add Uninstall Button**：旧管理メニューとの互換用。Add Help Buttonと同じ管理ボタン同期を行う。
-- **Uninstall**：安全のため自動でシェルフを削除しません。ボタンを押すと、Maya標準のShelf EditorでnToolsタブだけを削除し、Save All Shelvesで保存・再起動する手順を案内します。案内ウィンドウには本体削除用のPythonコードを独立した欄で表示し、右側の「コピー」でコードだけをコピーできます。再起動前にメモ帳などへ保存し、再起動後にScript EditorのPythonタブへ貼り付けて実行してください（管理画面のUninstall選択は不要）。登録情報とシェルフファイルが残っていないことを確認し、最終確認後に本体をバックアップに移動します。他のシェルフやプロジェクトは変更しません。
+- **Uninstall**：ボタンを押すとMaya標準の確認ウィンドウが表示されます。削除を承認した場合にのみnTools専用シェルフと本体を削除します。本体は復元可能なバックアップに移動し、Maya.env・他のシェルフ・シーンは変更しません。キャンセルした場合はアンインストールしません。通信や生成処理中のツールがある場合、不正なシェルフ設定や管理対象外のボタンがある場合は中止します。正常に終了したらMayaを再起動してください。
 
-Updateは本体更新に加え、必要な場合だけCity Builder・データ集合ツール・管理ボタン・Separatorを同期します。Uninstallは2段階の案内方式です。
+Updateは本体更新に加え、必要な場合だけCity Builder・データ集合ツール・管理ボタン・Separatorを同期します。UninstallはMaya標準の確認ウィンドウから完結する方式です。
 
 初回導入では再起動不要です。v1.0.11以降の更新では未使用のツールを読み込み直すため原則再起動不要です。通信・生成処理中のツールは閉じてからUpdateを再実行してください。旧v1.0.10以前からの初回移行時、および安全なコード切替に失敗した場合、アンインストール後は再起動が必要です。
-
-本体削除用コード（案内ウィンドウのコピー内容）：
-
-```python
-import sys, maya.cmds as cmds
-p = cmds.internalVar(userScriptDir=True)
-if p not in sys.path: sys.path.insert(0,p)
-from ntools import installer as nt
-nt.uninstall()
-```
 
 
 

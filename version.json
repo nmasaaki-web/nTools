@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "nTools",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "tools": [
     {
       "id": "sketchfab",
@@ -66,7 +66,7 @@
     }
   ],
   "files": {
-    "install.py": "d9fc2e9300528afc03e91ef8b918ba45e45e91c1003e0aa8346c37eaecb33e57",
+    "install.py": "bc08e242b400882623d531e84bc6b9bff675551b7d0c73221984350002bd0314",
     "scripts/ntools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/__init__.py": "3972bc6b98bf19e70af91f8eef9e120894463bcb9ccf72aa3261f0695181bf65",
     "scripts/ntools/tools/data_collector.py": "8a61c26a3fa332ecbc1d20c22937eb5a4a2effd4de19f99a03f37aaccec6f2b3",

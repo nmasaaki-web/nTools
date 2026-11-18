@@ -25,10 +25,11 @@ SHELF = 'nTools'
 PACKAGE = 'ntools'
 MAX_BYTES = 32 * 1024 * 1024
 _RESTART_REQUIRED = False
-INSTALLER_VERSION = '1.0.21'
+INSTALLER_VERSION = '1.0.22'
 _SEPARATOR = '<ntools:shelf-separator>'
 _SHELF_SAVE_PENDING = False
 _UPDATE_BUSY = False
+_UNINSTALL_BUSY = False
 
 
 def _maya():
@@ -526,121 +527,122 @@ def repair_shelf():
         traceback.print_exc(); _notify('シェルフ登録失敗：\n'+str(exc)+'\n本体は保持しています。MayaのUIを確認してください。')
 
 
-def _uninstall_guide():
-    """Display copyable instructions without modifying the shelf or package."""
-    code = _command('nt.uninstall()')
+def _uninstall_shelf_registration():
+    """Check the exact nTools registration without rewriting other preferences."""
+    cmds, _ = _maya()
+    if _shelf_path().is_file():
+        return 'shelf_nTools.mel remains on disk'
+    if cmds.optionVar(exists='numShelves'):
+        count = int(cmds.optionVar(q='numShelves'))
+        if count < 0 or count > 1000:
+            raise RuntimeError('Unexpected Maya shelf preference count.')
+        for i in range(1, count + 1):
+            for prefix in ('shelfName', 'shelfFile'):
+                key = prefix + str(i)
+                if cmds.optionVar(exists=key):
+                    value = str(cmds.optionVar(q=key)).replace('\\', '/').split('/')[-1].casefold()
+                    if value in ('ntools', 'shelf_ntools', 'shelf_ntools.mel'):
+                        return key + '=' + value
+    return None
+
+
+def _uninstall_once():
+    """Run after the shelf button callback returns, not while deleting itself.
+
+    deleteShelfTab provides its OWN single Yes/No confirmation. Calling a
+    second confirmDialog here would force the user to confirm twice. Its native
+    implementation removes both the live tab and Maya's reload preferences.
+    """
+    global _UNINSTALL_BUSY
     try:
-        try:
-            from PySide6 import QtGui, QtWidgets
-            from shiboken6 import wrapInstance
-        except ImportError:
-            from PySide2 import QtGui, QtWidgets
-            from shiboken2 import wrapInstance
-        import maya.OpenMayaUI as omui
-        ptr = omui.MQtUtil.mainWindow()
-        parent = wrapInstance(int(ptr), QtWidgets.QWidget) if ptr else None
-        dialog = QtWidgets.QDialog(parent)
-        dialog.setWindowTitle('nTools — アンインストール')
-        dialog.resize(690, 405)
-        dialog.setMinimumWidth(510)
-        layout = QtWidgets.QVBoxLayout(dialog)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
+        cmds, mel = _maya()
+        before = _ui_snapshot()
+        dest = _target()
+        manifest = _installed()
+        if manifest is None or not dest.is_dir() or dest.is_symlink():
+            raise RuntimeError('正常なnTools本体を確認できません。削除しません。')
+        if getattr(sys, '_ntools_restart_required', False):
+            raise RuntimeError('先にMayaを再起動してください。')
+        active_modules = {'ntools.tools.' + item['module'] for item in manifest['tools']}
+        blockers = _hot_update_blockers(active_modules)
+        if blockers:
+            raise RuntimeError('実行中のツールを閉じてから、もう一度Uninstallを押してください。\n'
+                               + '\n'.join(blockers))
 
-        title = QtWidgets.QLabel('シェルフと本体を順番に削除します。')
-        font = title.font(); font.setBold(True); title.setFont(font)
-        title.setWordWrap(True); layout.addWidget(title)
-        steps = QtWidgets.QLabel(
-            '① Maya標準のShelf Editorで nTools タブだけを削除。\n'
-            '② Save All Shelves で保存し、Mayaを再起動。\n'
-            '③ 再起動後、Script EditorのPythonタブに下のコードを貼り付けて実行。')
-        steps.setWordWrap(True); layout.addWidget(steps)
-
-        code_header = QtWidgets.QLabel('本体削除用 Pythonコード')
-        layout.addWidget(code_header)
-        row = QtWidgets.QHBoxLayout(); layout.addLayout(row)
-        editor = QtWidgets.QPlainTextEdit()
-        editor.setPlainText(code)
-        editor.setReadOnly(True)
-        editor.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
-        font_db = QtGui.QFontDatabase
-        fixed = getattr(font_db, 'FixedFont', None)
-        if fixed is None: fixed = font_db.SystemFont.FixedFont
-        editor.setFont(font_db.systemFont(fixed))
-        editor.setMinimumHeight(135)
-        row.addWidget(editor, 1)
-        side = QtWidgets.QVBoxLayout(); row.addLayout(side)
-        copy_button = QtWidgets.QPushButton('コピー')
-        copy_button.setMinimumWidth(88)
-        copy_button.setAutoDefault(False)
-        copy_button.setToolTip('Pythonコードだけをクリップボードにコピーします。')
-        side.addWidget(copy_button); side.addStretch(1)
-        status = QtWidgets.QLabel('コピーしたコードは再起動前にメモ帳などへ保存しておくと確実です。')
-        status.setWordWrap(True); layout.addWidget(status)
-
-        def copy_code():
-            clipboard = QtWidgets.QApplication.clipboard()
-            if clipboard is None:
-                status.setText('コピーできませんでした。Script Editorにコードを表示しました。')
-                print(code)
+        live_shelf = cmds.shelfLayout(_shelf(), exists=True)
+        if live_shelf:
+            if not _owned_shelf():
+                raise RuntimeError('nToolsシェルフに管理対象外のボタンがあります。安全のため自動削除しません。')
+            # Protect the existing preferences before Maya's native command.
+            ui_backup = _backup_ui()
+            try:
+                # This command displays the ONE confirmation dialog and manages
+                # Maya's shelf registration (unlike deleteUI). Do not show a
+                # second dialog, or call deleteUI on the live shelf/button.
+                mel.eval('deleteShelfTab "nTools";')
+            except Exception:
+                # Preserve the backup and the installed Python code on error.
+                raise
+            if cmds.shelfLayout(_shelf(), exists=True):
+                # User chose No/cancel; do not delete anything, even the package.
+                # Remove only the uniquely generated, unchanged backup folder.
+                try:
+                    shutil.rmtree(ui_backup)
+                except OSError:
+                    pass
                 return
-            clipboard.setText(code)
-            status.setText('コードをコピーしました。再起動前にメモ帳などへ貼り付けて保存できます。')
-        copy_button.clicked.connect(copy_code)
-        notice = QtWidgets.QLabel('この画面ではシェルフも本体も削除しません。コードを実行すると最終確認が表示されます。')
-        notice.setWordWrap(True); layout.addWidget(notice)
-        bottom = QtWidgets.QHBoxLayout(); layout.addLayout(bottom)
-        bottom.addStretch(1)
-        close = QtWidgets.QPushButton('閉じる'); close.setAutoDefault(False)
-        close.clicked.connect(dialog.reject); bottom.addWidget(close)
-        if hasattr(dialog, 'exec'): dialog.exec()
-        else: dialog.exec_()
-    except Exception:
-        # Preserve the two-stage removal if Qt is unavailable; never attempt
-        # automatic deletion as a fallback. Code remains available in the log.
+        else:
+            # Files Only install: no shelf to remove, so this is the sole prompt.
+            if _uninstall_shelf_registration():
+                raise RuntimeError('nToolsのシェルフ登録が残っています。Mayaを再起動して確認してください。')
+            choice = cmds.confirmDialog(title='nTools — アンインストール',
+                         message='本当にnToolsをアンインストールしますか？\n'
+                                 'インストールされたツール本体をバックアップへ移動します。',
+                         button=['Yes', 'No'], defaultButton='No',
+                         cancelButton='No', dismissString='No')
+            if choice != 'Yes':
+                return
+
+        # Fail closed if Maya did not remove the persistent shelf references.
+        if _uninstall_shelf_registration():
+            raise RuntimeError('Mayaのシェルフ登録が残っています。本体は削除せず保持しました。\n'
+                               'Mayaを終了して設定を確認してください。')
+        if _ui_snapshot() != before:
+            raise RuntimeError('Mayaのメニュー状態に変化を検出しました。\n'
+                               'nTools本体は保持しました。UIバックアップを確認してください。')
+        # Dispose an idle local map server, but never interrupt background work.
+        _quiesce_closed_tools(active_modules)
+        backup = dest.parent / ('.ntools-uninstalled-' + uuid.uuid4().hex)
+        dest.rename(backup)  # Reversible: do not delete students' local data.
+        sys._ntools_restart_required = True
+        _notify('nToolsのアンインストールが完了しました。\n'
+                'シェルフを削除し、本体をバックアップに移動しました。\n'
+                '制作データや他のシェルフは削除していません。\n'
+                'Mayaを再起動してください。\nバックアップ: ' + str(backup))
+    except Exception as exc:
         traceback.print_exc()
-        print('nTools: 本体削除用 Pythonコード:\n'+code)
-        _notify('Shelf EditorでnToolsだけを削除し、Save All Shelvesで保存・再起動してください。\n'
-                '再起動前にScript Editorの履歴に表示したPythonコードを保存し、再起動後に実行してください。\n'
-                'この段階では何も削除していません。')
+        _notify('アンインストールを完了できませんでした。\n' + str(exc) +
+                '\n処理が途中まで進んだ場合は、Mayaを再起動する前にUIを確認してください。')
+    finally:
+        _UNINSTALL_BUSY = False
 
 
 def uninstall_from_shelf():
-    # No automatic deletion of a running Maya shelf. Guide user to native UI.
     uninstall()
 
 
 def uninstall():
-    """Two-stage uninstall; never delete a live shelf programmatically."""
+    """One native Yes/No prompt; deferred so the button is not self-deleted."""
+    global _UNINSTALL_BUSY
+    if _UNINSTALL_BUSY:
+        return
+    _UNINSTALL_BUSY = True
     try:
-        _ui_snapshot(); cmds,_=_maya(); dest=_target()
-        if getattr(sys,'_ntools_restart_required',False):
-            _notify('先にMayaを再起動してください。'); return
-        if _installed() is None: raise RuntimeError('認識できるnTools本体がありません。変更しません。')
-        if cmds.shelfLayout(_shelf(),exists=True):
-            if not _owned_shelf():
-                raise RuntimeError('nToolsシェルフに未確認のボタンがあります。自動削除しません。')
-            _backup_ui()
-            _uninstall_guide()
-            return
-        # Check persistent registrations before moving the package.
-        if _shelf_path().exists():
-            raise RuntimeError('シェルフファイルが残っています。Shelf Editorで削除・保存し、再起動してください。')
-        if cmds.optionVar(exists='numShelves'):
-            count=int(cmds.optionVar(q='numShelves'))
-            for i in range(1,count+1):
-                for key in ('shelfName','shelfFile'):
-                    k=key+str(i)
-                    if cmds.optionVar(exists=k):
-                        v=str(cmds.optionVar(q=k)).replace('\\','/').split('/')[-1].casefold()
-                        if v in ('ntools','shelf_ntools','shelf_ntools.mel'):
-                            raise RuntimeError('nToolsのシェルフ登録情報が残っています。Mayaを再起動して確認してください。')
-        if not _confirm('nTools本体を復元可能なバックアップに移動します。\nシーン・他のシェルフ・Maya.envは変更しません。\n作業を保存し、nToolsのウィンドウを閉じてください。','Uninstall'):return
-        backup=dest.parent/('.ntools-uninstalled-'+uuid.uuid4().hex)
-        dest.rename(backup); sys._ntools_restart_required=True
-        _notify('nTools本体をアンインストールしました。Mayaを再起動してください。\nバックアップ：'+str(backup))
-    except Exception as exc:
-        traceback.print_exc(); _notify('アンインストール中止：\n'+str(exc))
+        cmds, _ = _maya()
+        cmds.evalDeferred(_uninstall_once)
+    except Exception:
+        _UNINSTALL_BUSY = False
+        raise
 
 
 def manage():

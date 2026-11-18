@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintainer: python release.py 1.0.21 (outside Maya)."""
+"""Maintainer: python release.py 1.0.22 (outside Maya)."""
 import hashlib
 import json
 from pathlib import Path
@@ -29,5 +29,5 @@ def main(version):
     print('Manifest generated:',version)
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('Usage: python release.py 1.0.21')
+    if len(sys.argv)!=2:raise SystemExit('Usage: python release.py 1.0.22')
     main(sys.argv[1])
