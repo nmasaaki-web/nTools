@@ -210,9 +210,9 @@ MayaのUndoに対応しますが、作業前に必ずシーンを保存してく
 > ご注意：これはSSS用の色の配線を準備する機能です。サムネイルとの見た目の一致を保証するものではありません。Arnold Stand-inに既に書き出されたASSは自動的には更新されません。
 
 
-## Stand-in Look Controller（v5.4.7）
+## Stand-in Look Controller（v5.4.8）
 
-**対象:** nTools v1.0.25以降のPolyHaven Asset Browserから新規に書き出したArnold `.ass`。
+**対象:** nTools v1.0.25以降のPolyHaven Asset Browserから新規に書き出したArnold `.ass`。追加されたSSS Color Exposureについてはv1.0.26以降で生成したASSが対象です。
 旧版で作成したASSや、他の配布元で作成したASSには必要な制御用ノードが含まれないため、**既存ASSに後からユーザーデータ属性を付けるだけでは動きません。** 再インポートしてASSを生成するか、Arnold公式のOperators機能で手動設定してください。
 
 ### 使い方
@@ -230,11 +230,16 @@ MayaのUndoに対応しますが、作業前に必ずシーンを保存してく
 |---|---|---:|---|
 | Plant SSS | Subsurface Weight | 0 | 葉・草など該当マテリアルのSSSの強さ。幹・樹皮には接続しない |
 | Plant SSS | SSS Color Saturation | 1 | SSS色の彩度。SSS用aiColorCorrectがある場合のみ |
+| Plant SSS | **SSS Color Exposure (stops)** | **0** | **SSS色だけの露出補正。-4～+4 stops。Base Color Exposureとは独立（v1.0.26以降に作成したASS）** |
 | Surface | Base Color Exposure | 0 | 元のBase Colorテクスチャを残したまま明るさを調整 |
 | Surface | Base Color Saturation | 1 | 元のBase Colorテクスチャを残したまま彩度を調整 |
 | Surface | Coat Weight | 0 | 元のCoat Weightがゼロで未接続の場合にだけ設定可能 |
 
 ツールは実際のASSに組み込めた項目だけを操作可能にし、接続がない項目はグレーアウトします。
+
+**SSSの明るさ調整:** Weight 1.0にすると、表面反射の見え方が大きく変わり、葉が暗くなる場合があります。まずWeight 0.1～0.3、SSS Color Exposure +0.5～+1程度を目安にArnold RenderViewで比較してください。Exposureは必ずしも物理的に正しい葉の透過表現を保証するものではなく、ライトの位置・Thin Walled・Opacityも影響します。
+
+**旧ASSの互換性:** v1.0.25で生成済みのASSにはSSS Exposure制御用のaiUserDataFloatがありません。既存Stand-inの他の項目は引き続き調整できますが、SSS Color Exposureを使用するにはv1.0.26以降でASSを**一度だけ作り直す**必要があります。以後の数値調整のためにASSを再生成する必要はありません。
 **Roughness・Metalnessのテクスチャは上書きしません。** 書き換えるとPBRの質感を壊すため、現段階では編集対象外です。必要な場合はマテリアルの元データかArnold Operatorsを使用してください。
 
 ### 複数のASS・MASHでの注意点

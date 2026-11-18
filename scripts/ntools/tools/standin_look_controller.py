@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""nTools Stand-in Look Controller v1.0 (Maya 2027 / MtoA).
+"""nTools Stand-in Look Controller v1.1 (Maya 2027 / MtoA).
 
 Safe, opt-in per-procedural look controls for ASS created by PolyHaven v5.4.7+.
 The shader network is prepared before .ass export; the values are subsequently
@@ -28,6 +28,7 @@ PROFILE_ATTR = 'ntoolsLookProfile'
 CONTROLS = OrderedDict([
     ('sss_weight',       ('Plant SSS', 'Subsurface Weight',       0.0, 0.0, 1.0)),
     ('sss_saturation',   ('Plant SSS', 'SSS Color Saturation',     1.0, 0.0, 2.0)),
+    ('sss_exposure',     ('Plant SSS', 'SSS Color Exposure (stops)', 0.0,-4.0, 4.0)),
     ('base_exposure',    ('Surface',   'Base Color Exposure',    0.0,-3.0, 3.0)),
     ('base_saturation',  ('Surface',   'Base Color Saturation',   1.0, 0.0, 2.0)),
     ('coat_weight',      ('Surface',   'Coat Weight',             0.0, 0.0, 1.0)),
@@ -129,9 +130,13 @@ def prepare_export_materials(materials, log=print):
                 ss_src = _source(mat+'.subsurfaceColor')
                 if ss_src:
                     ss_node=ss_src.split('.')[0]
-                    if cmds.nodeType(ss_node)=='aiColorCorrect' and _userdata_float(
-                            ss_node,'saturation','sss_saturation'):
-                        available.add('sss_saturation')
+                    if cmds.nodeType(ss_node)=='aiColorCorrect':
+                        if _userdata_float(ss_node,'saturation','sss_saturation'):
+                            available.add('sss_saturation')
+                        # Independent of Base Color, while retaining the
+                        # original texture, color-space and UV connections.
+                        if _userdata_float(ss_node,'exposure','sss_exposure'):
+                            available.add('sss_exposure')
         cc=_base_color_correction(mat)
         if cc:
             if _userdata_float(cc,'exposure','base_exposure'):
@@ -284,6 +289,11 @@ if QtWidgets is not None:
                     spin.valueChanged.connect(lambda _value,c=check:c.setChecked(True))
                     row.addWidget(check,1);row.addWidget(spin)
                     lay.addLayout(row);self.inputs[name]=(check,spin)
+                if section=='Plant SSS':
+                    note=QtWidgets.QLabel(
+                        'SSS Color ExposureはSSS色だけを調整し、Base Colorには影響しません。\n'
+                        'Weight=1では暗く見えることがあります。まずWeight 0.1～0.3、Exposure +0.5～+1程度から試してください。')
+                    note.setWordWrap(True);lay.addWidget(note)
                 if section=='Surface':
                     note=QtWidgets.QLabel('Roughness・Metalnessのテクスチャ接続は変更しません。\n'
                          'Base Color Exposure/Saturationは元の色テクスチャを保持します。')

@@ -104,3 +104,11 @@ Python構文、ハッシュ、ZIP、ファイル置換、模擬Maya APIによる
 - **実機必須テスト:** Arnoldで1本の葉材のWeight=0→0.3、SSS Saturation 1→0.7、Surface Exposure 0→1を試し差異を確認。保存・再読込、3本独立ASS、同一ASSを2個配置した場合、Auto Instancing ON/OFF、MASH経由での動作をテスト。未実施なら授業用Public版へ公開しない。
 - ソースパス・FBXの幹や葉の材質判定、既存ASSの仕様は変更していない。新機能を使うにはv1.0.25以降で改めてASSを作る必要がある。
 - MtoAごとの `mtoa_constant_` user data転送や `aiColorCorrect.exposure` 属性の実機検証が重要。非対応の場合は操作を無効化、別のエクスポート方法を検討する。
+
+## v1.0.26: SSS Color Exposure for Arnold Stand-in
+
+- Plant SSSの既存aiColorCorrect.exposureへ `aiUserDataFloat` を接続（デフォルト0、従来表示と等価）。`mtoa_constant_ntools_sss_exposure`でStand-inごとに調整する。
+- `CONTROLS` ホワイトリストに `sss_exposure` を追加。カラー補正ノードや元Diffuseテクスチャは共有したまま。
+- `read_profile` は、古いschema1でチャンネルがないASSには新項目を出さない。古いASSを無言でサポート扱いにしない。
+- 旧ASSへのチャンネル付与は行わない。v1.0.26以降で再生成したASSのみ新しいSSS Exposureを操作できる。
+- 必ずMaya 2027+MtoAの実機Arnoldレンダリングで確認してから授業配布する。

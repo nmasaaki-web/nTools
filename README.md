@@ -1,4 +1,4 @@
-# nTools v1.0.25
+# nTools v1.0.26
 
 Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
@@ -14,14 +14,16 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 | アイコン | ツール・操作マニュアル | バージョン | 機能 |
 |---|---|---|---|
 | [![SF](scripts/ntools/icons/sketchfab.png)](docs/tools/sketchfab.md) | [Sketchfab Asset Browser](docs/tools/sketchfab.md) | 1.3.1 | 静的glTFモデル、Specular-Glossiness自動変換、OpenPBR |
-| [![PH](scripts/ntools/icons/polyhaven.png)](docs/tools/polyhaven.md) | [PolyHaven Asset Browser](docs/tools/polyhaven.md) | 5.4.7 | 植物SSSとASS Look Controller（SSS・Base Color・Coat）、木ごとのASS、HDRI |
+| [![PH](scripts/ntools/icons/polyhaven.png)](docs/tools/polyhaven.md) | [PolyHaven Asset Browser](docs/tools/polyhaven.md) | 5.4.8 | 植物SSSとASS Look Controller（SSS・Base Color・Coat）、木ごとのASS、HDRI |
 | [![CITY](scripts/ntools/icons/city.png)](docs/tools/city_builder.md) | [Maya City Builder](docs/tools/city_builder.md) | 2.4.1 | OSM / PLATEAU / Procedural / 日本風の街並み生成 |
 | [![MAT](scripts/ntools/icons/material.png)](docs/tools/material_creator.md) | [Material Creator](docs/tools/material_creator.md) | 1.3 | ローカルテクスチャ / JSONからOpenPBR作成 |
 | [![RIG](scripts/ntools/icons/quadruped.png)](docs/tools/quadruped.md) | [Quadruped Quick Rig](docs/tools/quadruped.md) | 2.4.0 | 四足ガイド、IK/FK、試験的なリターゲット |
 | [![集合！](scripts/ntools/icons/collector_whistle.png)](docs/tools/data_collector.md) | [データ集合ツール / Data Collector](docs/tools/data_collector.md) | 1.1 | プロジェクト外のテクスチャ・キャッシュ・参照シーン等をコピーして再リンク |
 
 
-> **v1.0.25: Stand-in Look Controller / PolyHaven v5.4.7** — 新規にASS化するPolyHavenアセットに限り、Arnold User Dataによる安全な外観調整チャンネルを追加。PolyHaven上部の「Stand-in Look Controller」から選択したaiStandInのSSS Weight、SSS Color Saturation、Base Color Exposure/Saturation、Coat Weight（作成できた項目のみ）を変更できます。ASS本体を編集・再書き出しせず、シーン保存で設定を保持します。既存の旧ASSや外部製ASSには対応するチャンネルがないため、再インポートまたはArnold Operatorsによる個別の手動設定が必要です。別々の見た目を持つ複製ではAuto Instancingの無効化によりメモリ使用量が増える場合があります。**Maya 2027/MtoAでの実機レンダリング検証は未実施です。** 詳細は[Stand-in Lookガイド](docs/tools/polyhaven.md#stand-in-look-controllerv547)を確認してください。
+> **v1.0.26: SSS Color Exposure / PolyHaven v5.4.8** — Plant SSSタブに **SSS Color Exposure (stops)**（初期値0、-4～+4）を追加。葉・草のSubsurface Color用aiColorCorrectのExposureをArnold User Dataで制御し、Base Color Exposureや元テクスチャには影響しません。ASS出力時にチャンネルを用意するため、**v1.0.25で生成したASSで新機能を使うには最初の1回だけ再生成**が必要です。その後はMayaから調整可能です。SSS Weight=1は葉を暗くする場合があります。Weight 0.1～0.3から調整してください。**Maya 2027実機での動作未検証。**
+
+> **v1.0.25: Stand-in Look Controller / PolyHaven v5.4.7** — 新規にASS化するPolyHavenアセットに限り、Arnold User Dataによる安全な外観調整チャンネルを追加。PolyHaven上部の「Stand-in Look Controller」から選択したaiStandInのSSS Weight、SSS Color Saturation、Base Color Exposure/Saturation、Coat Weight（作成できた項目のみ）を変更できます。ASS本体を編集・再書き出しせず、シーン保存で設定を保持します。既存の旧ASSや外部製ASSには対応するチャンネルがないため、再インポートまたはArnold Operatorsによる個別の手動設定が必要です。別々の見た目を持つ複製ではAuto Instancingの無効化によりメモリ使用量が増える場合があります。**Maya 2027/MtoAでの実機レンダリング検証は未実施です。** 詳細は[Stand-in Lookガイド](docs/tools/polyhaven.md#stand-in-look-controllerv548)を確認してください。
 
 > **v1.0.24: PolyHaven Asset Browser v5.4.6** — 草・葉のDiffuseからSubsurface ColorへaiColorCorrect（Multiply/Saturation調整）を自動接続。新規SSS Weightは初期0。幹・樹皮・岩は対象外。シーン内既存の草・葉向けの後付けボタンも追加（既存Weightは維持）。詳細は[植物SSSガイド](docs/tools/polyhaven.md#植物のsubsurface-colorsssv546)。
 

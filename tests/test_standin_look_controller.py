@@ -7,8 +7,10 @@ from ntools.tools import standin_look_controller as lc
 
 
 def test_whitelist_and_attribute_names():
-    assert set(lc.CONTROLS)=={'sss_weight','sss_saturation','base_exposure','base_saturation','coat_weight'}
+    assert set(lc.CONTROLS)=={'sss_weight','sss_saturation','sss_exposure','base_exposure','base_saturation','coat_weight'}
     assert lc.maya_standin_attr('sss_weight')=='mtoa_constant_ntools_sss_weight'
+    assert lc.maya_standin_attr('sss_exposure')=='mtoa_constant_ntools_sss_exposure'
+    assert lc.CONTROLS['sss_exposure'][2:]==(0.0,-4.0,4.0)
     try:
         lc.maya_standin_attr('unsupported')
         assert False
@@ -93,7 +95,7 @@ class FakeShaderGraph:
         self.attrs={
             'leaf':{'baseColor','subsurfaceColor','subsurfaceWeight','coatWeight'},
             'rock':{'baseColor','coatWeight'},
-            'leafSSS':{'outColor','saturation'},
+            'leafSSS':{'outColor','saturation','exposure'},
             'leafDiffuse':{'outColor'},'rockDiffuse':{'outColor'},
         }
         self.inputs={'leaf.baseColor':'leafDiffuse.outColor',
@@ -133,6 +135,11 @@ def test_prepare_export_preserves_base_textures_and_does_not_touch_existing_coat
         profile=lc.prepare_export_materials(materials,lambda msg:None)
     assert 'sss_weight' in profile['controls']
     assert 'sss_saturation' in profile['controls']
+    assert 'sss_exposure' in profile['controls']
+    sss_user_data=[n for n,t in graph.types.items() if t=='aiUserDataFloat' and 'sss_exposure' in n]
+    assert len(sss_user_data)==1
+    assert graph.inputs['leafSSS.exposure']==sss_user_data[0]+'.outValue'
+    assert graph.values[sss_user_data[0]+'.defaultValue']==0.0
     assert 'base_exposure' in profile['controls']
     assert 'base_saturation' in profile['controls']
     assert 'coat_weight' in profile['controls']  # for leaf with original coat zero
@@ -156,3 +163,54 @@ def test_prepare_sss_requires_existing_sss_color_network():
         result=lc.prepare_export_materials({'leaf':{'mat':'leaf','foliage':True}},lambda msg:None)
     assert 'sss_weight' not in result['controls']
     assert 'sss_saturation' not in result['controls']
+    assert 'sss_exposure' not in result['controls']
+
+
+def test_sss_exposure_does_not_modify_base_color_connection():
+    graph=FakeShaderGraph()
+    with mock.patch.object(lc,'cmds',graph):
+        profile=lc.prepare_export_materials({'leaf':{'mat':'leaf','foliage':True}},lambda msg:None)
+    assert 'sss_exposure' in profile['controls']
+    assert graph.inputs['leaf.baseColor'].endswith('.outColor')
+    assert graph.inputs['leafSSS.exposure'].endswith('.outValue')
+    assert 'leafDiffuse.outColor'==graph.inputs[next(n for n in graph.types if n.startswith('leaf_StandInBaseAdjust'))+'.input']
+    assert not any(k.endswith('leafDiffuse.exposure') for k in graph.inputs)
+
+
+def test_sss_exposure_not_available_without_arnold_exposure_attribute():
+    graph=FakeShaderGraph()
+    graph.attrs['leafSSS'].remove('exposure')
+    with mock.patch.object(lc,'cmds',graph):
+        profile=lc.prepare_export_materials({'leaf':{'mat':'leaf','foliage':True}},lambda msg:None)
+    assert 'sss_saturation' in profile['controls']
+    assert 'sss_exposure' not in profile['controls']
+
+
+def test_old_profile_keeps_existing_controls_but_rejects_missing_exposure():
+    class Fake:
+        def attributeQuery(self,name,node,exists=True):
+            return name in {'ntoolsLookProfile','mtoa_constant_ntools_sss_weight','mtoa_constant_ntools_sss_saturation'}
+        def getAttr(self,plug):
+            if plug.endswith('.ntoolsLookProfile'):
+                return '{"schema":1,"producer":"nTools/PolyHaven","controls":["sss_weight","sss_saturation"]}'
+            return 'file.ass'
+        def setAttr(self,*a):raise AssertionError('must not change existing ASS without channel')
+        def undoInfo(self,**kw):raise AssertionError('must reject preflight')
+    with mock.patch.object(lc,'cmds',Fake()):
+        assert lc.read_profile('oldAssShape')['controls']==['sss_weight','sss_saturation']
+        try:
+            lc.apply_controls(['oldAssShape'],{'sss_exposure':1.0},False)
+        except ValueError as exc:
+            assert '調整チャンネル' in str(exc)
+        else:
+            assert False, 'Should reject missing control'
+
+
+def test_sss_exposure_is_checked_against_safe_range():
+    with mock.patch.object(lc,'cmds',object()):
+        try:
+            lc.apply_controls(['shape'],{'sss_exposure':5.0},True)
+        except ValueError as exc:
+            assert 'out of range' in str(exc)
+        else:
+            assert False, 'Out-of-range value must fail'
