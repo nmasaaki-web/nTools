@@ -94,3 +94,13 @@ Python構文、ハッシュ、ZIP、ファイル置換、模擬Maya APIによる
 - 動作中のツールや不明なシェルフボタンがあると中断します。削除前に既存UI設定をバックアップし、削除後に登録情報が残っていないことを確認してから本体を`.ntools-uninstalled-*`へ名前変更します。元ファイルは物理削除しません。
 - nToolsのシェルフそのものから実行されるため、削除処理は`cmds.evalDeferred`で実行し、ボタンコールバック中にその親を破棄しません。
 - **検証必須**：Maya 2027のWindowsおよびMacで Yes/Noを選択した際の動作、再起動後のFileメニューと他シェルフ、nToolsシェルフが復元されないことを確認する。まずは検証用のユーザープリファレンスとシーンで行う。
+
+
+## v1.0.25: Stand-in Look Controller
+
+- `standin_look_controller.py` をnTools本体と共に配布。PolyHavenの上部ボタンから起動。シェルフ構成は変えない。
+- ASS生成前にOpenPBRの未接続パラメータへ `aiUserDataFloat` を接続し、Base Colorに中立の `aiColorCorrect` を追加。元テクスチャの接続を維持する。
+- ASS生成後にaiStandInへ `mtoa_constant_ntools_*` と `ntoolsLookProfile` を作成。SHAPE属性はMayaシーンに保持。調整はASS本体を編集しない。
+- **実機必須テスト:** Arnoldで1本の葉材のWeight=0→0.3、SSS Saturation 1→0.7、Surface Exposure 0→1を試し差異を確認。保存・再読込、3本独立ASS、同一ASSを2個配置した場合、Auto Instancing ON/OFF、MASH経由での動作をテスト。未実施なら授業用Public版へ公開しない。
+- ソースパス・FBXの幹や葉の材質判定、既存ASSの仕様は変更していない。新機能を使うにはv1.0.25以降で改めてASSを作る必要がある。
+- MtoAごとの `mtoa_constant_` user data転送や `aiColorCorrect.exposure` 属性の実機検証が重要。非対応の場合は操作を無効化、別のエクスポート方法を検討する。

@@ -1,4 +1,4 @@
-# PolyHaven Asset Browser v5.4.4
+# PolyHaven Asset Browser v5.4.6
 
 [← nTools トップへ戻る](../../README.md)
 
@@ -169,3 +169,84 @@ Fir Tree 01の3本（`a`, `b`, `c`）には公式の `trunk_a`, `trunk_b`, `trun
 ### v5.4.5 — ASS書き出し確認の表示調整
 
 「編集可能メッシュで保持」ボタンの「（推奨）」表記を取り除きました。Fir Tree 01などでマテリアル判定が曖昧な場合、推定素材を適用してASS化・現状のままASS化・編集可能メッシュで保持・キャンセルの選択肢を提示する仕様は変わりません。推定素材は確定情報ではないため、ASS化後にArnoldで見た目を確認してください。
+
+
+## 植物のSubsurface Color（SSS、v5.4.6）
+
+PolyHavenの植物（草、葉、シダ、花びらなど）をOpenPBRで新規インポートすると、
+**Diffuse/Base Colorと同じテクスチャ**から、調整用の `aiColorCorrect` ノードを自動作成し、
+`subsurfaceColor` へ接続します。
+
+```text
+Diffuse File.outColor ──► OpenPBR.baseColor
+                 └──────► aiColorCorrect.input ──► OpenPBR.subsurfaceColor
+                              Multiply = 1.0
+                              Saturation = 1.0
+OpenPBR.subsurfaceWeight = 0.0 (初期値・見た目には反映されない)
+```
+
+### レンダリング時の調整
+
+1. Mayaで取り込んだ植物を選択し、Hypershadeで葉の `openPBRSurface` を開きます。
+2. 接続された `*_SSS_ColorAdjust`（Arnold aiColorCorrect）を選択して、**Multiply**、**Saturation** を調整します。
+3. SSSを利用したいときだけ、OpenPBRの **Subsurface Weight** を0から上げます。0のままなら従来の見た目が基本的に維持されます。
+4. Arnold RenderViewで葉の透過・色を確認し、必要に応じて調整します。照明や葉の厚さにより結果は異なります。
+
+### 自動判定と安全性
+
+- 名前の `leaf/leaves/foliage/grass/fern/flower/petal/needle` などを優先します。植物アセットの `twig` / `atlas` はOpacityマスク付きの場合に限って対象にします。
+- `bark/trunk/branch/wood/stem` などの木質部分は対象外です。岩・地面・通常サーフェスにはSSS接続を作りません。
+- **画像内容を認識して判定するものではありません。** 名称が不規則な葉は対象外になることがあります。
+- すでに `subsurfaceColor` に独自の接続がある場合は変更しません。OpenPBRやArnoldノードの必要な属性がない環境では安全にスキップしてログに報告します。
+- 新規生成時のSubsurface Weightは従来と同じ **0** です。SSSを自動的にONにはしません。
+
+### 既存の植物マテリアルに追加する
+
+上部の **「植物SSS（既存シーン）」** を押し、確認画面で「はい」を選択します。
+草・葉の名前を持つOpenPBRマテリアルだけに不足している色調整ネットワークを追加します。
+**既存のSubsurface Weight・Thin Walled・Base Colorの接続は変更しません。**
+MayaのUndoに対応しますが、作業前に必ずシーンを保存してください。
+
+> ご注意：これはSSS用の色の配線を準備する機能です。サムネイルとの見た目の一致を保証するものではありません。Arnold Stand-inに既に書き出されたASSは自動的には更新されません。
+
+
+## Stand-in Look Controller（v5.4.7）
+
+**対象:** nTools v1.0.25以降のPolyHaven Asset Browserから新規に書き出したArnold `.ass`。
+旧版で作成したASSや、他の配布元で作成したASSには必要な制御用ノードが含まれないため、**既存ASSに後からユーザーデータ属性を付けるだけでは動きません。** 再インポートしてASSを生成するか、Arnold公式のOperators機能で手動設定してください。
+
+### 使い方
+
+1. Mayaで **File → Set Project** を確認し、PolyHavenからモデルをImport as Arnold Stand-inで取り込む。
+2. Outlinerから作成されたStand-inを選択します（複数選択可）。
+3. PolyHaven Asset Browser上部の **Stand-in Look Controller** を押し、「選択を読み込み」を選ぶ。
+4. **Plant SSS / Surface** を切り替え、変更する項目の横にチェックを入れて数値を設定。
+5. 「同じASSを使用するすべてのStand-inに適用」をON（初期値）なら、同じASSを参照する全nTools Stand-inに適用。OFFなら選択したStand-inだけを変更します。
+6. **「選択した項目を適用」** を押し、Arnold RenderView / IPRで結果を確認します。変更は現在のMayaシーンに保存され、ASSソースは上書きされません。
+
+### 各項目の意味
+
+| タブ | 項目 | 初期値 | 使い方・制限 |
+|---|---|---:|---|
+| Plant SSS | Subsurface Weight | 0 | 葉・草など該当マテリアルのSSSの強さ。幹・樹皮には接続しない |
+| Plant SSS | SSS Color Saturation | 1 | SSS色の彩度。SSS用aiColorCorrectがある場合のみ |
+| Surface | Base Color Exposure | 0 | 元のBase Colorテクスチャを残したまま明るさを調整 |
+| Surface | Base Color Saturation | 1 | 元のBase Colorテクスチャを残したまま彩度を調整 |
+| Surface | Coat Weight | 0 | 元のCoat Weightがゼロで未接続の場合にだけ設定可能 |
+
+ツールは実際のASSに組み込めた項目だけを操作可能にし、接続がない項目はグレーアウトします。
+**Roughness・Metalnessのテクスチャは上書きしません。** 書き換えるとPBRの質感を壊すため、現段階では編集対象外です。必要な場合はマテリアルの元データかArnold Operatorsを使用してください。
+
+### 複数のASS・MASHでの注意点
+
+- **同じASSをすべて同じ見た目にする**のが最も省メモリで簡単です。
+- **選択したStand-inだけ** を個別調整するとき、同じASSへの他の参照が存在する場合は確認を表示します。承認すると対象Stand-inの **Auto InstancingをOFF** にし、独立した見た目を優先します。木の大量配置ではメモリ使用量が増える場合があるため、必要なものだけ個別化してください。
+- MASHインスタンスは、1つのStand-in形状を共有する場合があります。その場合、このコントローラーだけでは**MASHの個々のインスタンス別**のマテリアル変更はできません。Arnold/MASHのUser Data運用を別途設計する必要があります。
+- 既存のASS内部で不確定なマテリアルがある場合、ASSに出力した時点で正しい見た目が保証されるわけではありません。
+- ASSがArnoldレンダラーで適切に変換されるかどうかは、Maya/MtoAのバージョンに依存するため、最初は小さなテストシーンで確認してください。
+
+### 技術と安全性
+
+MtoAの `aiUserDataFloat` を新規ASSのOpenPBR/aiColorCorrectに接続し、MayaのaiStandIn形状ノード上の `mtoa_constant_ntools_*` 属性から値を渡します。外部ASSや元のFBXは変更せず、対象属性の変更だけをMayaのUndoチャンクとして記録します。既存のBase Color、Roughness、Metalness、Normal、Opacity、Displacementなどの接続を維持します。元のCoat Weightが非ゼロの素材には、Coat制御を追加しません。
+
+公式資料：[Arnold Stand-ins](https://help.autodesk.com/cloudhelp/ENU/AR-Maya/files/am-Arnold_for_Maya_User_Guide/shapes/arnold_for_maya_shapes_am_Stand_ins_html.html)、[Arnold Operators](https://help.autodesk.com/cloudhelp/ENU/AR-Maya/files/am-Arnold_for_Maya_User_Guide/arnold_for_maya_am_Operators_html.html)。

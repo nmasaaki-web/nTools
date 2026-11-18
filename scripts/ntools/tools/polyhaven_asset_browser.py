@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PolyHaven Asset Browser v5.4.5.
+"""PolyHaven Asset Browser v5.4.7.
 Paste into Maya Python Script Editor, or import polyhaven_asset_browser; call show().
 Poly Haven public API, local library, OpenPBR and Arnold. No Fab UI.
 """
@@ -32,7 +32,7 @@ except ImportError:
     except ImportError:
         QtCore = QtGui = QtWidgets = wrapInstance = None
 
-VERSION = '5.4.5'
+VERSION = '5.4.7'
 MESH_EXT = {'.fbx', '.obj'}
 IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.exr', '.tga', '.bmp', '.tx', '.hdr', '.webp'}
 SKIP_DIRS = {'.git', '__pycache__', 'node_modules', 'maya_asset_browser', 'standins', 'sourceimages'}
@@ -601,6 +601,139 @@ def create_file(t, asset, prefix, placement, copy_files, log):
     return f
 
 
+
+# nTools Plant SSS: new foliage is prepared with editable color controls, but
+# Weight remains 0. Existing materials keep their artist-authored settings.
+# This is based on material/asset metadata and texture names, not image analysis.
+_FOLIAGE_WORDS = re.compile(
+    r'(^|_)(leaf|leaves|foliage|grass|fern|petal|petals|flower|flowers|needles|needle)(_|$)', re.I)
+_WOODY_WORDS = re.compile(
+    r'(^|_)(bark|trunk|branch|branches|wood|stem|stems)(_|$)', re.I)
+_PLANT_CATEGORY_WORDS = re.compile(
+    r'(^|_)(plant|plants|vegetation|tree|trees|shrub|shrubs|bush|bushes)(_|$)', re.I)
+
+
+def is_plant_sss_target(material_key, category='', has_opacity=False):
+    """Conservative metadata/name-based foliage classification.
+
+    ``twig`` and ``atlas`` are only classified when an opacity mask is present
+    and the asset belongs to the Plants category. Never classify woody names.
+    """
+    key = normalized(material_key)
+    cat = normalized(category)
+    if _WOODY_WORDS.search(key):
+        return False
+    if _FOLIAGE_WORDS.search(key):
+        return True
+    return bool(has_opacity and _PLANT_CATEGORY_WORDS.search(cat)
+                and (re.search(r'(^|_)(twig|twigs|atlas)(_|$)', key)
+                     or not key or key in ('default', 'material')))
+
+
+def setup_plant_sss_color(mat, diffuse_output_plug, log=None, reset_weight=True):
+    """Add Diffuse -> aiColorCorrect -> OpenPBR Subsurface Color safely.
+
+    The new network is intentionally visually inactive (SSS Weight 0). The
+    Multiply/Saturation controls remain editable in Hypershade. In an existing
+    scene reset_weight=False preserves Weight, Thin Walled and all other user
+    attributes. Existing SSS input connections are never overwritten.
+    """
+    if log is None:
+        log = print
+    if not cmds or not mat or not diffuse_output_plug:
+        return False
+    try:
+        if not cmds.objExists(mat) or not cmds.objExists(diffuse_output_plug):
+            log('[Plant SSS] Skipped missing material or Diffuse source: ' + str(mat))
+            return False
+        if not attr(mat, 'subsurfaceColor'):
+            log('[Plant SSS] Skipped: OpenPBR subsurfaceColor not found on ' + mat)
+            return False
+        if cmds.listConnections(mat+'.subsurfaceColor', source=True,
+                                destination=False, plugs=True):
+            log('[Plant SSS] Skipped existing SSS network: ' + mat)
+            return False
+    except Exception as e:
+        log('[Plant SSS] Cannot check '+str(mat)+': '+str(e))
+        return False
+    cc = None
+    try:
+        # Other Arnold utilities in this importer require mtoa too.
+        try:
+            if not cmds.pluginInfo('mtoa', query=True, loaded=True):
+                cmds.loadPlugin('mtoa', quiet=True)
+        except Exception:
+            pass
+        cc = cmds.shadingNode('aiColorCorrect', asUtility=True,
+                              name=mat+'_SSS_ColorAdjust')
+        in_plug = next((a for a in ('input','inputColor','inColor') if attr(cc,a)), None)
+        out_plug = next((a for a in ('outColor','outValue') if attr(cc,a)), None)
+        if not in_plug or not out_plug or not attr(cc,'multiply') or not attr(cc,'saturation'):
+            raise RuntimeError('aiColorCorrect lacks expected color/multiply/saturation attributes')
+        # Wire the SAME color source to Base Color and SSS so the original
+        # Base Color connection, color-space rules and UVs remain unchanged.
+        plug(diffuse_output_plug, cc+'.'+in_plug)
+        cmds.setAttr(cc+'.saturation', 1.0)
+        value_type = cmds.getAttr(cc+'.multiply', type=True)
+        if value_type in ('float3','double3'):
+            cmds.setAttr(cc+'.multiply',1.0,1.0,1.0,type=value_type)
+        elif value_type in ('float','double'):
+            cmds.setAttr(cc+'.multiply',1.0)
+        else:
+            raise RuntimeError('Unexpected aiColorCorrect.multiply type: '+str(value_type))
+        # Never force a new connection over an artist's existing network.
+        cmds.connectAttr(cc+'.'+out_plug, mat+'.subsurfaceColor', force=False)
+        if reset_weight and attr(mat,'subsurfaceWeight'):
+            if not cmds.listConnections(mat+'.subsurfaceWeight',source=True,
+                                        destination=False,plugs=True):
+                cmds.setAttr(mat+'.subsurfaceWeight',0.0)
+        log('[Plant SSS] '+mat+': Diffuse -> '+cc+
+            ' (Multiply 1 / Saturation 1) -> Subsurface Color; Weight '+
+            ('0 for new import' if reset_weight else 'preserved'))
+        return True
+    except Exception as e:
+        if cc and cmds.objExists(cc):
+            try: cmds.delete(cc)
+            except Exception: pass
+        log('[Plant SSS] Skipped '+mat+': '+str(e))
+        return False
+
+
+def add_plant_sss_to_scene_materials(log=None):
+    """Opt-in retrofit: add missing SSS network, never change Weight/Thin Walled."""
+    if log is None: log=print
+    changed=skipped=0
+    mats = cmds.ls(type='openPBRSurface') or []
+    cmds.undoInfo(openChunk=True, chunkName='nTools Plant SSS Setup')
+    try:
+        for mat in mats:
+            key = normalized(mat)
+            try:
+                opacity = bool(cmds.listConnections(mat+'.geometryOpacity',
+                               source=True,destination=False,plugs=True)) if attr(mat,'geometryOpacity') else False
+                # Already assigned twig textures can have alpha masks. Restrict
+                # these patterns to avoid applying SSS to wooden materials.
+                foliage = bool(_FOLIAGE_WORDS.search(key)) and not _WOODY_WORDS.search(key)
+                if not foliage and opacity and not _WOODY_WORDS.search(key):
+                    foliage = bool(re.search(r'(^|_)(twig|twigs)(_|$)',key))
+                if not foliage:
+                    continue
+                source = cmds.listConnections(mat+'.baseColor',source=True,
+                                              destination=False,plugs=True) or []
+                if not source:
+                    skipped+=1
+                    continue
+                if setup_plant_sss_color(mat, source[0], log, reset_weight=False):
+                    changed+=1
+                else:
+                    skipped+=1
+            except Exception as e:
+                skipped+=1
+                log('[Plant SSS] Retrofit skipped '+mat+': '+str(e))
+    finally:
+        cmds.undoInfo(closeChunk=True)
+    return changed,skipped
+
 def build_material(asset,key,settings,tier,mesh_lod,log):
     maps=texture_set(asset,key,settings['resolution'],tier,mesh_lod)
     prefix=clean_name(asset.name+'_'+key)[:80]
@@ -688,9 +821,14 @@ def build_material(asset,key,settings,tier,mesh_lod,log):
     if opacity:
         # Standalone opacity maps are usually grayscale in RGB, not in alpha.
         plug(files['opacity']+'.outColorR',mat+'.geometryOpacity')
-    plant_leaf=bool(re.search(r'(^|_)(leaf|leaves|foliage|grass|fern|petal|flower|atlas)(_|$)',key))
-    thin=plant_leaf or (asset.category=='Plants' and opacity and not re.search(r'(^|_)(bark|trunk|branch|wood)(_|$)',key))
+    # Keep existing thin-walled vegetation behavior; exclude woody components.
+    foliage = is_plant_sss_target(key, asset.category, opacity)
+    thin = foliage or (asset.category=='Plants' and opacity and not _WOODY_WORDS.search(normalized(key)))
     if thin: set_if(mat,'geometryThinWalled',True)
+    # New imports: prepare color correction, but keep SSS Weight OFF by default.
+    # Non-foliage (bark/trunk/wood, stone, ground, etc.) is unchanged.
+    if foliage and 'base' in files:
+        setup_plant_sss_color(mat, files['base']+'.outColor', log, reset_weight=True)
     if tex('emission'):
         plug(files['emission']+'.outColor',mat+'.emissionColor'); set_if(mat,'emissionLuminance',1.0)
     if 'translucency' in maps:
@@ -713,7 +851,7 @@ def build_material(asset,key,settings,tier,mesh_lod,log):
             plug(scale+'.outputX',dis+'.displacement'); plug(dis+'.displacement',sg+'.displacementShader')
             displaced=True
         else: log('  WARNING: Displacement enabled, but no height map or ORDp found.')
-    return {'mat':mat,'sg':sg,'opacity':opacity,'displaced':displaced}
+    return {'mat':mat,'sg':sg,'opacity':opacity,'displaced':displaced,'foliage':foliage}
 
 
 def mesh_faces(shape):
@@ -998,7 +1136,7 @@ def _export_ass_file(selection,dest):
         raise RuntimeError('ASS export failed: '+str(dest))
 
 
-def export_standin(root,asset,log,split_mode='auto'):
+def export_standin(root,asset,log,split_mode='auto',materials=None):
     """Export scene groups as independent ASS files, safely retaining source on failure.
 
     Temporary translation moves each part's bbox bottom-center to world zero
@@ -1009,6 +1147,17 @@ def export_standin(root,asset,log,split_mode='auto'):
     units=standin_units(root,log) if split_mode=='auto' else [root]
     folder=workspace_root()/'data'/'AssetBrowser'/'standins';folder.mkdir(parents=True,exist_ok=True)
     proxies=[];exports=[]; old_sel=cmds.ls(selection=True,long=True) or []
+    # Enable non-destructive per-Stand-in look adjustments in NEW archives only.
+    # This must run before exporting shaders to ASS; existing archives stay intact.
+    look_profile={'schema':1,'producer':'nTools/PolyHaven','controls':[]}
+    _look=None
+    try:
+        from ntools.tools import standin_look_controller as _look
+        look_profile=_look.prepare_export_materials(materials or {},log)
+    except Exception as exc:
+        # Look controls are optional; they must never block ASS export.
+        log('WARNING: Stand-in Look Controller was not prepared: '+str(exc))
+        _look=None
     try:
         for index,unit in enumerate(units,1):
             # Preserve existing world transform and return it even on export error.
@@ -1032,6 +1181,12 @@ def export_standin(root,asset,log,split_mode='auto'):
             proxies.append(proxy)
             shape=cmds.createNode('aiStandIn',name=clean_name(asset.name)+'_%02d_StandInShape'%index,parent=proxy)
             cmds.setAttr(shape+'.dso',project_path(dest),type='string')
+            if _look is not None and look_profile['controls']:
+                try:
+                    _look.attach_profile(shape,look_profile)
+                except Exception as exc:
+                    log('WARNING: Stand-in Look attributes unavailable: '+str(exc))
+                    log('WARNING: Archive created, but look controls may be unavailable.')
             set_if(shape,'overrideShaders',False)
             cmds.xform(proxy,worldSpace=True,translation=list(pivot))
             log('ASS %d/%d: %s' % (index,len(units),dest.as_posix()))
@@ -1196,7 +1351,7 @@ def import_asset(asset,settings,choose_mapping,log):
                     log('WARNING: ASS export skipped: no materials identified. Keeping editable mesh.')
                 if permit_export:
                     try:
-                        root=export_standin(root,asset,log,settings.get('standin_split','auto'))
+                        root=export_standin(root,asset,log,settings.get('standin_split','auto'),materials)
                     except Exception as e:
                         log('WARNING: Stand-in failed; keeping editable geometry. '+str(e))
                         if QtWidgets is not None and settings.get('_parent') is not None:
@@ -2108,6 +2263,8 @@ if QtWidgets is not None:
             def button(layout,label,fn):
                 b=QtWidgets.QPushButton(label); b.clicked.connect(fn); layout.addWidget(b); return b
             button(row,'Repair Texture Paths',self.repair_paths)
+            button(row,'植物SSS（既存シーン）',self.setup_scene_plant_sss)
+            button(row,'Stand-in Look Controller',self.open_standin_look_controller)
             button(row,'Open Cache',lambda:QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(self.cache/'PolyHaven'))))
             row.addStretch(1); v.insertLayout(2,row)
             # Native browser has one search row inside the active tab. Keep the
@@ -2208,6 +2365,55 @@ if QtWidgets is not None:
                 self.refresh_api_btn.setVisible(False) # Local: use the existing Refresh button.
                 self.rebuild()
             self.on_selected()
+
+        def open_standin_look_controller(self):
+            if self._busy or self.jobs:
+                QtWidgets.QMessageBox.information(self,'nTools',
+                    '現在のダウンロードやインポートが完了してから開いてください。')
+                return
+            try:
+                from ntools.tools import standin_look_controller
+                # The source may have been hot-updated since it was first read.
+                # The controller is opened on demand, not left running in background.
+                import importlib
+                old_dialog=getattr(standin_look_controller,'_WINDOW',None)
+                if old_dialog is not None:
+                    try:
+                        old_dialog.close()
+                        old_dialog.deleteLater()
+                    except RuntimeError:
+                        pass
+                importlib.reload(standin_look_controller)
+                standin_look_controller.show(self)
+            except Exception as exc:
+                QtWidgets.QMessageBox.warning(self,'Stand-in Look Controller',str(exc))
+
+        def setup_scene_plant_sss(self):
+            if self._busy or self.jobs:
+                return
+            message = ('シーン内の草・葉と推定できるOpenPBRマテリアルに、'
+                       'Diffuse → aiColorCorrect → Subsurface Colorを追加します。\n\n'
+                       '既存のSSS接続、Weight、Thin Walledは変更しません。\n'
+                       '名前で判別できない素材はスキップします。\n'
+                       '実行前にシーンを保存してください。\n\n実行しますか？')
+            answer = QtWidgets.QMessageBox.question(
+                self, '植物SSSを既存マテリアルに追加', message,
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No)
+            if answer != QtWidgets.QMessageBox.Yes:
+                return
+            self._busy = True
+            try:
+                changed, skipped = add_plant_sss_to_scene_materials(self.log)
+                QtWidgets.QMessageBox.information(
+                    self, '植物SSS設定の結果',
+                    '追加: %d 件 / スキップ: %d 件\n'
+                    'SSS Weightは変更していません。必要に応じて調整してください。' % (changed, skipped))
+            except Exception as e:
+                self.log('Plant SSS error: '+str(e))
+                QtWidgets.QMessageBox.warning(self,'植物SSS設定に失敗',str(e))
+            finally:
+                self._busy = False
 
         def repair_paths(self):
             if self._busy:return

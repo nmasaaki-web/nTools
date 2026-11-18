@@ -1,4 +1,4 @@
-# nTools v1.0.23
+# nTools v1.0.25
 
 Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
@@ -14,12 +14,16 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 | アイコン | ツール・操作マニュアル | バージョン | 機能 |
 |---|---|---|---|
 | [![SF](scripts/ntools/icons/sketchfab.png)](docs/tools/sketchfab.md) | [Sketchfab Asset Browser](docs/tools/sketchfab.md) | 1.3.1 | 静的glTFモデル、Specular-Glossiness自動変換、OpenPBR |
-| [![PH](scripts/ntools/icons/polyhaven.png)](docs/tools/polyhaven.md) | [PolyHaven Asset Browser](docs/tools/polyhaven.md) | 5.4.5 | 重いモデルの警告・木ごとのASS自動分割、モデル・HDRI・ローカルライブラリ |
+| [![PH](scripts/ntools/icons/polyhaven.png)](docs/tools/polyhaven.md) | [PolyHaven Asset Browser](docs/tools/polyhaven.md) | 5.4.7 | 植物SSSとASS Look Controller（SSS・Base Color・Coat）、木ごとのASS、HDRI |
 | [![CITY](scripts/ntools/icons/city.png)](docs/tools/city_builder.md) | [Maya City Builder](docs/tools/city_builder.md) | 2.4.1 | OSM / PLATEAU / Procedural / 日本風の街並み生成 |
 | [![MAT](scripts/ntools/icons/material.png)](docs/tools/material_creator.md) | [Material Creator](docs/tools/material_creator.md) | 1.3 | ローカルテクスチャ / JSONからOpenPBR作成 |
 | [![RIG](scripts/ntools/icons/quadruped.png)](docs/tools/quadruped.md) | [Quadruped Quick Rig](docs/tools/quadruped.md) | 2.4.0 | 四足ガイド、IK/FK、試験的なリターゲット |
 | [![集合！](scripts/ntools/icons/collector_whistle.png)](docs/tools/data_collector.md) | [データ集合ツール / Data Collector](docs/tools/data_collector.md) | 1.1 | プロジェクト外のテクスチャ・キャッシュ・参照シーン等をコピーして再リンク |
 
+
+> **v1.0.25: Stand-in Look Controller / PolyHaven v5.4.7** — 新規にASS化するPolyHavenアセットに限り、Arnold User Dataによる安全な外観調整チャンネルを追加。PolyHaven上部の「Stand-in Look Controller」から選択したaiStandInのSSS Weight、SSS Color Saturation、Base Color Exposure/Saturation、Coat Weight（作成できた項目のみ）を変更できます。ASS本体を編集・再書き出しせず、シーン保存で設定を保持します。既存の旧ASSや外部製ASSには対応するチャンネルがないため、再インポートまたはArnold Operatorsによる個別の手動設定が必要です。別々の見た目を持つ複製ではAuto Instancingの無効化によりメモリ使用量が増える場合があります。**Maya 2027/MtoAでの実機レンダリング検証は未実施です。** 詳細は[Stand-in Lookガイド](docs/tools/polyhaven.md#stand-in-look-controllerv547)を確認してください。
+
+> **v1.0.24: PolyHaven Asset Browser v5.4.6** — 草・葉のDiffuseからSubsurface ColorへaiColorCorrect（Multiply/Saturation調整）を自動接続。新規SSS Weightは初期0。幹・樹皮・岩は対象外。シーン内既存の草・葉向けの後付けボタンも追加（既存Weightは維持）。詳細は[植物SSSガイド](docs/tools/polyhaven.md#植物のsubsurface-colorsssv546)。
 
 > **v1.0.23: Sketchfab Asset Browser v1.3.1** — SketchfabからのオンラインダウンロードおよびローカルglTFの取り込み前に「Set Projectをしましたか？」を確認します。現在のプロジェクトを表示し、「いいえ」で中止。「次のツール起動時まで表示しない」は、このウィンドウで同じプロジェクトを使っている間だけ有効です。ローカルglTFの元ファイルは自動コピーしません。
 
@@ -109,6 +113,19 @@ Updateは本体更新に加え、必要な場合だけCity Builder・データ�
 ## 動画・実機撮影
 
 既存4ツールのマニュアルには4ステップの操作図、GIF、MP4があります。City Builderは日本語の操作手順とモード別ガイドを掲載しています。Material CreatorはFabのQuixel Megascans Stone Surfaceを題材にしています。実際の素材を使うデモスクリプト、実機撮影とYouTube公開の手順は [撮影・実機検証ガイド](docs/capture_guide.md) を参照。素材本体は含みません。
+
+## PolyHaven：植物SSSへの対応（v1.0.24）
+
+新規に読み込む草・葉のOpenPBRマテリアルでは、Diffuse（Base Color）の出力から
+`aiColorCorrect`（**Multiply=1.0、Saturation=1.0**）を経由して
+**Subsurface Color** へ接続します。**Subsurface Weightの初期値は0**であり、
+必要に応じて手動で上げるまでSSSの見た目は有効になりません。
+植物の判定は材質名・アセット分類・Opacity情報によるもので、画像の中身を分析するものではありません。
+幹、樹皮、枝、木材、岩などのSSS接続は追加しません。既存のSubsurface Color接続は上書きしません。
+
+すでにシーンに読み込んだ草・葉には、PHウィンドウ上部の **「植物SSS（既存シーン）」** から
+安全に後付けできます（名前で判別できる材質のみ、**既存のWeightとThin Walledは変更しません**）。
+詳しくは [PolyHavenマニュアル](docs/tools/polyhaven.md#植物のsubsurface-colorsssv546) を参照してください。
 
 ## 利用時の注意
 
