@@ -1,4 +1,4 @@
-# nTools v1.0.22
+# nTools v1.0.23
 
 Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / OpenPBR利用環境）を想定。実機での動作確認は配布前に行ってください。
 
@@ -13,13 +13,15 @@ Maya向け授業用ツールセット。Windows / macOS、Maya 2027（Arnold / O
 
 | アイコン | ツール・操作マニュアル | バージョン | 機能 |
 |---|---|---|---|
-| [![SF](scripts/ntools/icons/sketchfab.png)](docs/tools/sketchfab.md) | [Sketchfab Asset Browser](docs/tools/sketchfab.md) | 1.3 | 静的glTFモデル、Specular-Glossiness自動変換、OpenPBR |
+| [![SF](scripts/ntools/icons/sketchfab.png)](docs/tools/sketchfab.md) | [Sketchfab Asset Browser](docs/tools/sketchfab.md) | 1.3.1 | 静的glTFモデル、Specular-Glossiness自動変換、OpenPBR |
 | [![PH](scripts/ntools/icons/polyhaven.png)](docs/tools/polyhaven.md) | [PolyHaven Asset Browser](docs/tools/polyhaven.md) | 5.4.5 | 重いモデルの警告・木ごとのASS自動分割、モデル・HDRI・ローカルライブラリ |
 | [![CITY](scripts/ntools/icons/city.png)](docs/tools/city_builder.md) | [Maya City Builder](docs/tools/city_builder.md) | 2.4.1 | OSM / PLATEAU / Procedural / 日本風の街並み生成 |
 | [![MAT](scripts/ntools/icons/material.png)](docs/tools/material_creator.md) | [Material Creator](docs/tools/material_creator.md) | 1.3 | ローカルテクスチャ / JSONからOpenPBR作成 |
 | [![RIG](scripts/ntools/icons/quadruped.png)](docs/tools/quadruped.md) | [Quadruped Quick Rig](docs/tools/quadruped.md) | 2.4.0 | 四足ガイド、IK/FK、試験的なリターゲット |
 | [![集合！](scripts/ntools/icons/collector_whistle.png)](docs/tools/data_collector.md) | [データ集合ツール / Data Collector](docs/tools/data_collector.md) | 1.1 | プロジェクト外のテクスチャ・キャッシュ・参照シーン等をコピーして再リンク |
 
+
+> **v1.0.23: Sketchfab Asset Browser v1.3.1** — SketchfabからのオンラインダウンロードおよびローカルglTFの取り込み前に「Set Projectをしましたか？」を確認します。現在のプロジェクトを表示し、「いいえ」で中止。「次のツール起動時まで表示しない」は、このウィンドウで同じプロジェクトを使っている間だけ有効です。ローカルglTFの元ファイルは自動コピーしません。
 
 > **v1.0.22: ワンクリックアンインストール** — UninstallボタンからMaya標準のシェルフ削除確認を表示し、削除を承認した場合のみnTools本体をバックアップに移動します。コードのコピー、Shelf Editor、手動の再起動前操作は不要です。対象ツールのウィンドウや通信処理が動いている場合、または不明なシェルフ項目がある場合は削除を中止します。完了後はMayaを再起動してください。Maya標準の確認画面はOSと言語設定により文言が異なることがあります。
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Sketchfab Asset Browser v1.3 (Windows/macOS, static glTF, Maya 2025+ OpenPBR).
+"""Sketchfab Asset Browser v1.3.1 (Windows/macOS, static glTF, Maya 2025+ OpenPBR).
 Run entire file in Maya Python Script Editor, or import and call show().
 No third-party Python packages. Sketchfab API token belongs to each user.
 """
@@ -17,7 +17,7 @@ def safe(s):
 
 # On macOS, use the OS-provided curl rather than Maya's embedded SSL library.
 # Keep certificate and hostname checks enabled on both platforms.
-USER_AGENT = 'MayaSketchfabAssetBrowser/1.3'
+USER_AGENT = 'MayaSketchfabAssetBrowser/1.3.1'
 MAC_CURL = '/usr/bin/curl'
 
 def https_url(url):
@@ -558,11 +558,43 @@ def fetch_thumb(url):
             try: os.unlink(tmp)
             except OSError: pass
 
+def workspace_root():
+    """Current Maya project, without creating directories or importing assets."""
+    return Path(c.workspace(query=True, rootDirectory=True)).resolve()
+
+
+def confirm_project_copy(owner, enabled=True):
+    """Match PolyHaven/Material Creator: confirm once per window and project."""
+    if not enabled:
+        return True
+    root = str(workspace_root())
+    if getattr(owner, '_confirmed_copy_root', None) == root:
+        return True
+    box = QtWidgets.QMessageBox(owner)
+    box.setWindowTitle('Set Projectの確認')
+    box.setIcon(QtWidgets.QMessageBox.Question)
+    box.setText('Set Projectをしたフォルダにテクスチャをコピーします。Set Projectはしましたか？')
+    box.setInformativeText('現在のプロジェクト：\n' + root + '\n\n「いいえ」で中止し、File → Set Projectを実行してください。')
+    check = QtWidgets.QCheckBox('次のツール起動時まで表示しない', box)
+    box.setCheckBox(check)
+    box.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+    box.button(QtWidgets.QMessageBox.Yes).setText('はい')
+    box.button(QtWidgets.QMessageBox.No).setText('いいえ（中止）')
+    box.setDefaultButton(QtWidgets.QMessageBox.No)
+    box.setEscapeButton(QtWidgets.QMessageBox.No)
+    result = box.exec() if hasattr(box, 'exec') else box.exec_()
+    if result != QtWidgets.QMessageBox.Yes:
+        return False
+    if check.isChecked():
+        owner._confirmed_copy_root = root
+    return True
+
+
 class Browser(QtWidgets.QDialog):
     def __init__(self,parent=None):
         super(Browser,self).__init__(parent)
         self.setObjectName('SketchfabAssetBrowserV13')
-        self.setWindowTitle('Sketchfab Asset Browser v1.3 | Windows / macOS | OpenPBR')
+        self.setWindowTitle('Sketchfab Asset Browser v1.3.1 | Windows / macOS | OpenPBR')
         self.setAttribute(QtCore.Qt.WA_DeleteOnClose,True)
         self.resize(850,790); self.setMinimumSize(520,600)
         self.rows=[]; self.next=None; self.page=0; self.view_epoch=0; self.detail_epoch=0
@@ -749,10 +781,19 @@ class Browser(QtWidgets.QDialog):
     def download(self):
         m=self.model(); detail=request(API+'models/'+m['uid']); credit=self.credit(detail)
         if c.confirmDialog(title='License / Attribution',message=credit+'\n\nImport this asset under its license?',button=['Import','Cancel'],defaultButton='Import',cancelButton='Cancel',dismissString='Cancel')!='Import': return
+        if not confirm_project_copy(self):
+            self.status.setText('Import cancelled: Set Project first (File → Set Project).')
+            return
         token=self.token.text().strip(); path=acquire(m['uid'],token); (cache_dir()/m['uid']/'ATTRIBUTION.txt').write_text(credit,encoding='utf-8'); self.finish(path,m.get('name','Asset'),credit)
     def import_local(self):
         paths=c.fileDialog2(fileMode=1,fileFilter='glTF (*.gltf)',caption='Import local glTF') or []
-        if paths: self.finish(Path(paths[0]),Path(paths[0]).stem,'Local asset: verify original license and author.')
+        if not paths: return
+        if not confirm_project_copy(self):
+            self.status.setText('Import cancelled: Set Project first (File → Set Project).')
+            return
+        # Local glTF source files stay where the student chose them.
+        # Converted Spec/Gloss textures may be written to this Maya project.
+        self.finish(Path(paths[0]),Path(paths[0]).stem,'Local asset: verify original license and author.')
     def finish(self,path,name,credit):
         gltf=GLTF(path); root,warnings=gltf.run(name,credit)
         label='Imported: '+root.split('|')[-1]

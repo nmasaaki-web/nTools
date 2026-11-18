@@ -1,10 +1,10 @@
-# Sketchfab Asset Browser v1.3
+# Sketchfab Asset Browser v1.3.1
 
 [← nTools トップへ戻る](../../README.md)
 
 ![Sketchfab](../../scripts/ntools/icons/sketchfab.png)
 
-Sketchfabのダウンロード可能な3Dモデルを検索し、Mayaへ静的メッシュとして読み込み、OpenPBRマテリアルを設定するツールです。v1.3で旧式のSpecular-Glossinessマテリアルの自動変換に対応しました。
+Sketchfabのダウンロード可能な3Dモデルを検索し、Mayaへ静的メッシュとして読み込み、OpenPBRマテリアルを設定するツールです。v1.3で旧式のSpecular-Glossinessマテリアルの自動変換、v1.3.1でSet Project確認に対応しました。
 
 ## クイックガイド（図解・GIF・動画）
 
@@ -36,14 +36,24 @@ Sketchfabのダウンロード可能な3Dモデルを検索し、Mayaへ静的�
 
 1. モデルを選択し、`Download & Import OpenPBR` を押します。
 2. ライセンス確認画面を読み、利用条件を守れる場合だけ `Import` を選択します。
-3. ダウンロード後、自動で静的メッシュ・UV・対応するテクスチャとOpenPBRマテリアルが作成されます。
-4. ビューポートの表示、Hypershade、Arnold RenderViewで形状と質感を確認し、シーンを保存します。
+3. **「Set Projectの確認」** で現在のプロジェクトパスを確認し、正しければ **はい** を押します。間違っていれば **いいえ（中止）** を選び、Mayaの **File → Set Project** を実行してから再試行します。
+4. ダウンロード後、自動で静的メッシュ・UV・対応するテクスチャとOpenPBRマテリアルが作成されます。
+5. ビューポートの表示、Hypershade、Arnold RenderViewで形状と質感を確認し、シーンを保存します。
 
 ダウンロードデータはプロジェクトの `sourceimages/Sketchfab/<モデルUID>/` に保存されます。作者・ライセンスの情報は `ATTRIBUTION.txt` とインポートしたルートの `sketchfabAttribution` 属性に記録されます。作品公開時はライセンスの指定に従ってクレジットを表示してください。
 
 ## 4. ローカルのglTFを読み込む
 
-`Import local .gltf (static, no login)` を押し、展開済みの `.gltf` ファイルを選択します。対応する `.bin` や画像ファイルも元の相対パスのまま置いてください。ローカル読み込みにAPIトークンは不要ですが、元データのライセンス確認は必要です。
+`Import local .gltf (static, no login)` を押し、展開済みの `.gltf` ファイルを選択すると、Set Project確認が表示されます。正しいプロジェクトが選ばれている場合のみ **はい** を押してください。対応する `.bin` や画像ファイルも元の相対パスのまま置いてください。ローカル読み込みにAPIトークンは不要ですが、元データのライセンス確認は必要です。
+
+
+### Set Project確認について（v1.3.1）
+
+- PolyHaven Asset Browser・Material Creatorと同じ文面で、現在のMayaプロジェクトパスを表示します。
+- **はい**：インポートを続行。**いいえ（中止）**：インポートを始めずに戻ります。
+- **次のツール起動時まで表示しない**：同一ウィンドウ・同一プロジェクト内でのみ確認を省略します。ウィンドウを開き直すかプロジェクトを変更すると再確認します。
+- この確認は **Set Projectを実行した履歴を自動検証する機能ではありません**。表示されたプロジェクトが正しいか必ず確認してください。
+- オンラインアセットは現在のプロジェクト内へ保存しますが、**ローカルglTFの元ファイル・画像は自動的にプロジェクト内へコピーされません**。外部依存に注意し、必要に応じてデータ集合ツールなどで整理してください。
 
 ## 5. Specular-Glossiness の自動変換（v1.3 新機能）
 
